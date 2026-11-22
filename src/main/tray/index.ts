@@ -11,6 +11,8 @@ import {
 export interface TrayActions {
   open(): void
   togglePause(): void
+  /** 显示/隐藏导演 HUD，与界面 setHud 同一个实现 */
+  toggleHud(): void
   quit(): void
 }
 
@@ -69,6 +71,12 @@ export function createTray(options: TrayOptions): TrayHandle {
       checked: state.paused,
       click: () => options.actions.togglePause()
     },
+    {
+      type: 'checkbox',
+      label: '导演 HUD',
+      checked: state.hudVisible,
+      click: () => options.actions.toggleHud()
+    },
     { type: 'separator' },
     { label: '退出', click: () => options.actions.quit() }
   ]
@@ -81,7 +89,7 @@ export function createTray(options: TrayOptions): TrayHandle {
       tray.setToolTip(tooltip)
     }
 
-    const menuKey = state.paused ? 'paused' : 'active'
+    const menuKey = `${state.paused ? 'paused' : 'active'}|${state.hudVisible ? 'hud' : 'nohud'}`
     if (menuKey !== lastMenuKey) {
       lastMenuKey = menuKey
       tray.setContextMenu(Menu.buildFromTemplate(template()))

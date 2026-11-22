@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="color-scheme" content="dark" />
+    <link rel="stylesheet" href="./src/hud.css" />
+    <title>Dayfilm HUD</title>
+  </head>
+  <body>
+    <main class="hud" id="hud" data-mood="shooting" aria-label="导演 HUD">
+      <div class="hud__head">
+        <button class="hud__dot" id="hudDot" type="button" title="打开主窗口" aria-label="打开主窗口"></button>
+        <span class="hud__status" id="hudState">REC</span>
+      </div>
+      <div class="hud__line">
+        <p class="hud__exe" id="hudExe">—</p>
+        <span class="hud__elapsed"><span class="hud__elapsed-prefix" id="hudElapsedPrefix" hidden>离开</span><span id="hudElapsed">00:00</span></span>
+      </div>
+      <p class="hud__title" id="hudTitle">—</p>
+      <div class="hud__rhythm" id="hudRhythm" aria-hidden="true"></div>
+      <div class="hud__today">
+        <span class="hud__metric">
+          <span class="hud__metric-label">镜头</span>
+          <span class="hud__metric-value" id="hudShots">0</span>
+        </span>
+        <span class="hud__metric">
+          <span class="hud__metric-label">剪辑</span>
+          <span class="hud__metric-value" id="hudCuts">0</span>
+        </span>
+        <span class="hud__metric hud__metric--verdict">
+          <span class="hud__metric-label">题材</span>
+          <span class="hud__metric-value" id="hudVerdict">—</span>
+        </span>
+      </div>
+    </main>
+    <script type="module" src="./src/hud.ts"></script>
+  </body>
+</html>

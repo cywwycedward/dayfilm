@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -7,10 +7,21 @@ import type { Settings } from '../shared/settings'
 import type { DayRollup, LiveState, Sample, Scene, ScreenplayExport } from '../shared/types'
 import { loginItemSettings } from './autostart'
 import { createCapture, resolveCaptureScript, type Capture } from './capture'
-import { describeError } from './errors'
+import { parseEdlDate, writeEdlFile } from './edl'
+import { describeError, describeWriteError } from './errors'
 import { ensureExtension, ensureMarkdownPath } from './export'
+import { createHud, hudPagePath, type HudHandle } from './hud'
 import { createIngest, type IngestResult } from './ingest'
-import { GUARDED_CHANNELS, createHandlers, parseDayRequest, type GuardedChannel, type GuardedHandler } from './ipc'
+import {
+  GUARDED_CHANNELS,
+  SEND_CHANNELS,
+  createHandlers,
+  createSendHandlers,
+  parseDayRequest,
+  type GuardedChannel,
+  type GuardedHandler,
+  type SendChannel
+} from './ipc'
 import { NotesStore } from './notes'
 import { buildDayRollup, renderScreenplay, searchScenes } from './reel'
 import { DayCache } from './reel/cache'
@@ -43,6 +54,7 @@ let store: DayStore
 let cache: DayCache
 let writeBuffer: WriteBuffer | null = null
 let capture: Capture | null = null
+let hud: HudHandle | null = null
 let tray: TrayHandle | null = null
 let mainWindow: BrowserWindow | null = null
 let tickTimer: NodeJS.Timeout | null = null
@@ -129,6 +141,7 @@ function trayStateOf(state: LiveState): TrayState {
     paused: state.paused,
     captureError: state.captureError,
     storageError: state.storageError,
+    hudVisible: settings.get().hud.visible,
     activeMs: state.day.activeMs
   }
 }
@@ -158,7 +171,7 @@ async function exportScreenplay(date: string): Promise<ScreenplayExport> {
     const text = renderScreenplay(rollupFor(date), { note: notes.get(date), projects: settings.get().projects })
     await writeFile(target, text, 'utf8')
   } catch (error) {
-    throw new Error(`剧本保存失败：${describeError(error)}`)
+    throw new Error(`剧本保存失败：${describeWriteError(error)}`)
   }
   return { path: target }
 }
@@ -179,9 +192,35 @@ async function saveImage(defaultName: unknown, pngBase64: unknown): Promise<{ pa
   try {
     await writeFile(target, bytes)
   } catch (error) {
-    throw new Error(`海报保存失败：${describeError(error)}`)
+    throw new Error(`海报保存失败：${describeWriteError(error)}`)
   }
   return { path: target }
+}
+
+/** EDL 导出（规格 R42）：日期校验 → 对话框 → 固定 .edl 扩展名 → 写盘。 */
+async function exportEdl(rawDate: unknown): Promise<{ path: string }> {
+  const date = parseEdlDate(rawDate)
+  if (!date) return { path: '' }
+  const options = {
+    defaultPath: `dayfilm-${date}.edl`,
+    filters: [{ name: 'CMX3600 EDL', extensions: ['edl'] }]
+  }
+  const focused = BrowserWindow.getFocusedWindow()
+  const result = focused ? await dialog.showSaveDialog(focused, options) : await dialog.showSaveDialog(options)
+  if (result.canceled || !result.filePath) return { path: '' }
+  const target = ensureExtension(result.filePath, 'edl')
+  // 写盘失败抛可读错误；IPC 层会把 rejection 交给界面提示（不静默）
+  await writeEdlFile(target, rollupFor(date))
+  return { path: target }
+}
+
+/** 显示/隐藏导演 HUD：界面与托盘共用一个实现，设置落盘后立即生效。 */
+function setHudVisible(visible: unknown): { visible: boolean } {
+  const next = Boolean(visible)
+  const current = settings.get().hud
+  if (current.visible !== next) applySettings({ hud: { ...current, visible: next } })
+  hud?.setVisible(next)
+  return { visible: next }
 }
 
 function rendererFileUrl(): string {
@@ -197,8 +236,8 @@ function trustedOrigin(): TrustedOrigin {
   return { devUrl: devServerUrl(), rendererFileUrl: rendererFileUrl() }
 }
 
-/** 只接受本应用窗口、本应用页面发起的调用（规格 R15.2）。 */
-function isTrustedSender(event: IpcMainInvokeEvent): boolean {
+/** 只接受本应用窗口、本应用页面发起的调用（规格 R15.2）。invoke 与 send 事件共用。 */
+function isTrustedSender(event: { sender: Electron.WebContents; senderFrame: Electron.WebFrameMain | null }): boolean {
   let frameUrl = ''
   try {
     frameUrl = event.senderFrame?.url ?? ''
@@ -219,6 +258,17 @@ function handleIpc(channel: GuardedChannel, handler: GuardedHandler): void {
       throw new Error('调用来源不可信')
     }
     return handler(...args)
+  })
+}
+
+/** 单向 send 通道（如 HUD 单击）同样过来源守卫，不合法直接丢弃。 */
+function listenIpc(channel: SendChannel, handler: GuardedHandler): void {
+  ipcMain.on(channel, (event, ...args: unknown[]) => {
+    if (!isTrustedSender(event)) {
+      console.warn(`[dayfilm] 拒绝不可信来源的 IPC：${channel}`)
+      return
+    }
+    handler(...args)
   })
 }
 
@@ -248,18 +298,24 @@ function registerIpc(): void {
       return notes.set(date, text)
     },
     saveImage: (defaultName, pngBase64) => saveImage(defaultName, pngBase64),
+    exportEdl: (date) => exportEdl(date),
+    setHud: (visible) => setHudVisible(visible),
     quit: () => {
       quitApp()
     }
   })
   // 通道清单是单一来源：新增通道却漏给守卫，tests/main/ipc.test.ts 会失败。
   for (const channel of Object.values(GUARDED_CHANNELS)) handleIpc(channel, handlers[channel])
+
+  const sendHandlers = createSendHandlers({ hudOpen: () => showWindow() })
+  for (const channel of Object.values(SEND_CHANNELS)) listenIpc(channel, sendHandlers[channel])
 }
 
-/** 应用设置变更的副作用：暂停/继续采集、同步启动项、立即清理过期数据。 */
+/** 应用设置变更的副作用：暂停/继续采集、同步启动项、立即清理过期数据、HUD 显隐。 */
 function applySettings(patch: unknown): Settings {
   const before = settings.get()
   const next = settings.update(patch)
+  if (next.hud.visible !== before.hud.visible) hud?.setVisible(next.hud.visible)
   if (next.paused !== before.paused) {
     if (next.paused) stopCapture()
     else startCapture()
@@ -416,6 +472,9 @@ function setupTray(): void {
         togglePause: () => {
           applySettings({ paused: !isPaused() })
         },
+        toggleHud: () => {
+          setHudVisible(!settings.get().hud.visible)
+        },
         quit: () => quitApp()
       }
     })
@@ -430,8 +489,27 @@ function setupTray(): void {
   }
 }
 
-function setupPowerMonitor(): void {
-  powerMonitor.on('suspend', () => {
+/** 导演 HUD：按设置创建并按需显示（规格 R40）。页面缺失时内部会告警一次并保持隐藏。 */
+function setupHud(): void {
+  hud = createHud({
+    settings: () => settings.get().hud,
+    savePosition: (x, y) => {
+      const current = settings.get().hud
+      try {
+        applySettings({ hud: { ...current, x, y } })
+      } catch (error) {
+        // 位置写不进去不影响 HUD 使用，下次拖动再试
+        console.warn('[dayfilm] HUD 位置保存失败', describeError(error))
+      }
+    },
+    preload: join(__dirname, '../preload/index.js'),
+    hudFile: hudPagePath(__dirname),
+    devUrl: devServerUrl()
+  })
+  hud.setVisible(settings.get().hud.visible)
+}
+
+function setupPowerMonitor(): void {  powerMonitor.on('suspend', () => {
     stopCapture()
   })
   powerMonitor.on('resume', () => {
@@ -487,6 +565,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!isPaused()) startCapture()
     registerIpc()
     setupTray()
+    setupHud()
     setupPowerMonitor()
     tickTimer = setInterval(broadcast, TICK_MS)
 
@@ -507,6 +586,8 @@ if (!app.requestSingleInstanceLock()) {
     writeBuffer = null
     tray?.destroy()
     tray = null
+    hud?.destroy()
+    hud = null
   })
 
   app.on('window-all-closed', () => {

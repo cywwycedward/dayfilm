@@ -7,6 +7,7 @@ import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
 import type { DayRollup, LiveState, Scene } from '../../shared/types'
 import { buildMockDay, buildMockLive, mockDates } from './mock'
 import { fmtClock, fmtDuration, isoDate, startOfDay } from './lib/time'
+import { formatEdl } from './lib/edl'
 import { mondayOf, weekDates } from './lib/week-film'
 
 export interface DayfilmSource {
@@ -25,6 +26,10 @@ export interface DayfilmSource {
   setNote(date: string, text: string): Promise<string>
   /** 把 base64 PNG 存到用户选择的路径；返回空串表示用户取消。 */
   saveImage(defaultName: string, pngBase64: string): Promise<string>
+  /** 导出 CMX3600 EDL；返回落盘路径或说明，空串表示取消。 */
+  exportEdl(date: string): Promise<string>
+  /** 显隐导演 HUD；返回切换后的状态。 */
+  setHud(visible: boolean): Promise<boolean>
   /** 真正退出应用。 */
   quit(): Promise<void>
   onTick(cb: (state: LiveState) => void): () => void
@@ -54,6 +59,8 @@ function liveSource(api: DayfilmApi): DayfilmSource {
     setNote: (date, text) => exposed.setNote?.(date, text) ?? missing('setNote'),
     saveImage: async (defaultName, pngBase64) =>
       (await (exposed.saveImage?.(defaultName, pngBase64) ?? missing('saveImage'))).path,
+    exportEdl: async (date) => (await (exposed.exportEdl?.(date) ?? missing('exportEdl'))).path,
+    setHud: async (visible) => (await (exposed.setHud?.(visible) ?? missing('setHud'))).visible,
     quit: () => exposed.quit?.() ?? missing('quit'),
     onTick: (cb) => api.onTick(cb)
   }
@@ -122,7 +129,8 @@ function mockSource(): DayfilmSource {
   const clone = (value: Settings): Settings => ({
     ...value,
     redactTerms: [...value.redactTerms],
-    projects: value.projects.map((rule) => ({ name: rule.name, terms: [...rule.terms] }))
+    projects: value.projects.map((rule) => ({ name: rule.name, terms: [...rule.terms] })),
+    hud: { ...value.hud }
   })
 
   return {
@@ -187,6 +195,22 @@ function mockSource(): DayfilmSource {
     },
     quit: async () => {
       // 演示环境不真的退出，界面会提示这一点
+    },
+    exportEdl: async (date) => {
+      const name = `dayfilm-${date}.edl`
+      const text = formatEdl(dayFor(date))
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = name
+      link.click()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      return `${name}（演示环境：浏览器下载）`
+    },
+    setHud: async (visible) => {
+      if (readonly) throw new Error('演示环境：设置只读，写入被拒绝')
+      settings = clone({ ...settings, hud: { ...settings.hud, visible } })
+      return visible
     },
     onTick: (cb) => {
       const timer = window.setInterval(() => cb(liveNow()), 2000)

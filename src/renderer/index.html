@@ -35,6 +35,7 @@
         <div class="topbar__end">
           <button class="btn" id="exportPoster" type="button">导出海报</button>
           <button class="btn" id="export" type="button">导出剧本</button>
+          <button class="btn btn--quiet" id="exportEdl" type="button">导出 EDL</button>
           <button class="btn" id="settings" type="button" aria-haspopup="dialog" aria-expanded="false">
             设置
           </button>
@@ -182,12 +183,24 @@
         <p class="empty" id="empty" hidden>还没有拍摄任何素材</p>
       </section>
 
+      <div class="titlecard" id="titleCard" hidden aria-hidden="true">
+        <div class="titlecard__inner">
+          <p class="titlecard__date" id="titleCardDate">—</p>
+          <p class="titlecard__verdict" id="titleCardVerdict">—</p>
+          <p class="titlecard__mark">DAYFILM</p>
+        </div>
+      </div>
+
       <div class="projection" id="projection" hidden>
         <div class="projection__perf projection__perf--top" aria-hidden="true"></div>
         <div class="projection__stage" id="projectionStage">
           <canvas id="projectionFrame"></canvas>
           <span class="projection__shot" id="shotCounter" hidden>SHOT 01 / 01</span>
           <span class="projection__cut" id="projectionCuts" hidden></span>
+          <div class="projection__subtitle" id="projectionSubtitle" hidden>
+            <span class="projection__subtitle-index" id="projectionSubtitleIndex">第 1 镜</span>
+            <span class="projection__subtitle-text" id="projectionSubtitleText">—</span>
+          </div>
         </div>
         <div class="projection__caption">
           <span class="projection__index" id="projectionIndex">#01</span>
@@ -247,7 +260,8 @@
               <h3>常驻</h3>
               <label class="switch"><input type="checkbox" id="settingAutoStart" /><span>开机自启</span></label>
               <label class="switch"><input type="checkbox" id="settingPaused" /><span>暂停采样</span></label>
-              <p class="hint">暂停与托盘菜单里的“暂停采样”是同一个开关。</p>
+              <label class="switch"><input type="checkbox" id="settingHud" /><span>导演 HUD</span></label>
+              <p class="hint">暂停与托盘菜单里的“暂停采样”是同一个开关；导演 HUD 是右上角的置顶小窗。</p>
             </section>
 
             <section class="fieldset">

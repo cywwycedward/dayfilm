@@ -1945,6 +1945,101 @@ textarea:focus-visible {
 
 /* 放映 -------------------------------------------------------------- */
 
+/* 片头卡：日期 → 题材 → DAYFILM，1.4s 后淡出 ----------------------------------- */
+.titlecard {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  background: rgba(10, 11, 13, 0.94);
+  pointer-events: none;
+}
+
+.titlecard[hidden] {
+  display: none;
+}
+
+.titlecard.is-playing {
+  animation: title-veil 1400ms linear both;
+}
+
+.titlecard__inner {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  text-align: center;
+}
+
+.titlecard__date {
+  margin: 0;
+  font: 400 12px/1.4 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  opacity: 0;
+}
+
+.titlecard__verdict {
+  margin: 0;
+  font: 700 44px/1.1 var(--font-ui);
+  letter-spacing: 0.04em;
+  color: var(--paper);
+  opacity: 0;
+}
+
+.titlecard__mark {
+  margin: 0;
+  font: 400 18px/1 var(--font-display);
+  letter-spacing: 0.12em;
+  color: var(--amber);
+  opacity: 0;
+}
+
+.titlecard.is-playing .titlecard__date {
+  animation: title-line 240ms var(--ease) 84ms both;
+}
+
+.titlecard.is-playing .titlecard__verdict {
+  animation: title-line 240ms var(--ease) 308ms both;
+}
+
+.titlecard.is-playing .titlecard__mark {
+  animation: title-line 240ms var(--ease) 532ms both;
+}
+
+@keyframes title-veil {
+  0% {
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  88% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes title-line {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .titlecard {
+    display: none;
+  }
+}
+
 .projection {
   position: fixed;
   inset: 0;
@@ -2101,6 +2196,58 @@ textarea:focus-visible {
   color: var(--paper);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 放映字幕：画面下沿上方 24px，一行，淡入 160ms */
+.projection__subtitle {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: calc(100% - 160px);
+  padding: 4px 10px 5px;
+  background: rgba(10, 11, 13, 0.72);
+  pointer-events: none;
+  transform: translateX(-50%);
+  animation: subtitle-in 160ms var(--ease);
+}
+
+.projection__subtitle[hidden] {
+  display: none;
+}
+
+.projection__subtitle-index {
+  flex: none;
+  font: 400 10px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  color: var(--paper-dim);
+}
+
+.projection__subtitle-text {
+  overflow: hidden;
+  font: 400 12px/1.4 var(--font-ui);
+  color: var(--paper);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes subtitle-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .projection__subtitle {
+    animation: none;
+  }
 }
 
 .projection__bar {

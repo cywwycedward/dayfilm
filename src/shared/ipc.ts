@@ -13,6 +13,8 @@ export const IPC = {
   getNote: 'dayfilm:get-note',
   setNote: 'dayfilm:set-note',
   saveImage: 'dayfilm:save-image',
+  exportEdl: 'dayfilm:export-edl',
+  setHud: 'dayfilm:set-hud',
   quit: 'dayfilm:quit',
   tick: 'dayfilm:tick'
 } as const
@@ -33,6 +35,10 @@ export interface DayfilmApi {
   setNote(date: string, text: string): Promise<string>
   /** 把界面渲染好的 PNG（base64，不带 data: 前缀）存到用户选择的路径。 */
   saveImage(defaultName: string, pngBase64: string): Promise<{ path: string }>
+  /** 把某一天导出成 CMX3600 EDL（24fps），返回落盘路径；取消返回空串。 */
+  exportEdl(date: string): Promise<{ path: string }>
+  /** 显示/隐藏导演 HUD，返回切换后的状态。 */
+  setHud(visible: boolean): Promise<{ visible: boolean }>
   /** 真正退出应用（含停止采集）。 */
   quit(): Promise<void>
   /** 订阅主进程每 2 秒推送的实时状态，返回取消订阅函数。 */

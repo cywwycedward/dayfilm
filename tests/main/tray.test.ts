@@ -11,7 +11,7 @@ import {
   type TrayState
 } from '../../src/main/tray/tooltip'
 
-const IDLE: TrayState = { paused: false, captureError: null, storageError: null, activeMs: 0 }
+const IDLE: TrayState = { paused: false, captureError: null, storageError: null, hudVisible: true, activeMs: 0 }
 const ALL: ReadonlySet<TrayMood> = new Set<TrayMood>(['active', 'paused', 'error'])
 
 describe('trayStatusLabel', () => {

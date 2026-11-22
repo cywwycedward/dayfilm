@@ -8,6 +8,14 @@ export interface ProjectRule {
   terms: string[]
 }
 
+/** 导演 HUD：置顶小窗的开关与上次位置。 */
+export interface HudSettings {
+  visible: boolean
+  /** 屏幕坐标；null 表示还没拖过，用默认位置 */
+  x: number | null
+  y: number | null
+}
+
 export interface Settings {
   /** 保留天数；0 表示不自动清理 */
   retentionDays: number
@@ -19,6 +27,8 @@ export interface Settings {
   paused: boolean
   /** 项目规则；命中最先匹配的一条 */
   projects: ProjectRule[]
+  /** 导演 HUD */
+  hud: HudSettings
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -26,7 +36,8 @@ export const DEFAULT_SETTINGS: Settings = {
   redactTerms: [],
   autoStart: false,
   paused: false,
-  projects: []
+  projects: [],
+  hud: { visible: true, x: null, y: null }
 }
 
 export const RETENTION_OPTIONS: readonly { value: number; label: string }[] = [

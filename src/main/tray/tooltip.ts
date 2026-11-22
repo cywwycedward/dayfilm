@@ -5,6 +5,8 @@ export interface TrayState {
   paused: boolean
   captureError: string | null
   storageError: string | null
+  /** 导演 HUD 是否显示（托盘菜单里的勾选项） */
+  hudVisible: boolean
   /** 当日已记录（非空闲）时长 */
   activeMs: number
 }

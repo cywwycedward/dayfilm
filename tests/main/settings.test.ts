@@ -48,7 +48,8 @@ describe('SettingsStore 读取', () => {
       redactTerms: DEFAULT_SETTINGS.redactTerms,
       autoStart: DEFAULT_SETTINGS.autoStart,
       paused: true,
-      projects: []
+      projects: [],
+      hud: DEFAULT_SETTINGS.hud
     })
   })
 
@@ -125,8 +126,33 @@ describe('normalizeSettings', () => {
     const settings = normalizeSettings({})
     settings.redactTerms.push('mine')
     settings.projects.push({ name: 'x', terms: ['y'] })
+    settings.hud.x = 1
     expect(DEFAULT_SETTINGS.redactTerms).toEqual([])
     expect(DEFAULT_SETTINGS.projects).toEqual([])
+    expect(DEFAULT_SETTINGS.hud).toEqual({ visible: true, x: null, y: null })
+  })
+
+  it('hud 字段归一：visible 用 Boolean()，坐标只收有限数', () => {
+    expect(normalizeSettings({}).hud).toEqual({ visible: true, x: null, y: null })
+    expect(normalizeSettings({ hud: { visible: false, x: 100, y: 200 } }).hud).toEqual({ visible: false, x: 100, y: 200 })
+    expect(normalizeSettings({ hud: { visible: 'yes' } }).hud.visible).toBe(true)
+    expect(normalizeSettings({ hud: { x: Number.NaN, y: Number.POSITIVE_INFINITY } }).hud).toEqual({
+      visible: true,
+      x: null,
+      y: null
+    })
+    expect(normalizeSettings({ hud: { x: '12' } }).hud.x).toBeNull()
+    // 不是对象就不接管，回落默认
+    expect(normalizeSettings({ hud: 'on' }).hud).toEqual({ visible: true, x: null, y: null })
+  })
+
+  it('hud 补丁只改传了的字段，没传的保留原值', () => {
+    const store = new SettingsStore(tempRoot())
+    store.update({ hud: { visible: false, x: 300, y: 200 } })
+    expect(store.update({ hud: { visible: true } }).hud).toEqual({ visible: true, x: 300, y: 200 })
+    // 显式传了非法坐标就当没拖过
+    expect(store.update({ hud: { x: 'nope' } }).hud).toEqual({ visible: true, x: null, y: 200 })
+    expect(store.update({ paused: true }).hud).toEqual({ visible: true, x: null, y: 200 })
   })
 })
 
@@ -193,8 +219,15 @@ describe('SettingsStore 保存', () => {
     const root = tempRoot()
     const store = new SettingsStore(root)
     const next = store.update({ retentionDays: 90, redactTerms: [' Payroll '], autoStart: true, bogus: 'ignored' })
-    expect(next).toEqual({ retentionDays: 90, redactTerms: ['Payroll'], autoStart: true, paused: false, projects: [] })
-    expect(Object.keys(next).sort()).toEqual(['autoStart', 'paused', 'projects', 'redactTerms', 'retentionDays'])
+    expect(next).toEqual({
+      retentionDays: 90,
+      redactTerms: ['Payroll'],
+      autoStart: true,
+      paused: false,
+      projects: [],
+      hud: DEFAULT_SETTINGS.hud
+    })
+    expect(Object.keys(next).sort()).toEqual(['autoStart', 'hud', 'paused', 'projects', 'redactTerms', 'retentionDays'])
     expect(new SettingsStore(root).get()).toEqual(next)
   })
 

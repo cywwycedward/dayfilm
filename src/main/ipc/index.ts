@@ -3,7 +3,7 @@ import type { Settings } from '../../shared/settings'
 import type { DayRollup, LiveState, Scene, ScreenplayExport } from '../../shared/types'
 
 /**
- * 受来源守卫包装的通道：`IPC` 里除单向推送的 `tick` 之外全部。
+ * 受来源守卫包装的 invoke 通道：`IPC` 里除单向推送的 `tick` 之外全部。
  * 这里是“注册哪些通道”的唯一来源——新增通道却漏了守卫，`tests/main/ipc.test.ts` 会失败。
  */
 export const GUARDED_CHANNELS = {
@@ -17,12 +17,26 @@ export const GUARDED_CHANNELS = {
   getNote: IPC.getNote,
   setNote: IPC.setNote,
   saveImage: IPC.saveImage,
+  exportEdl: IPC.exportEdl,
+  setHud: IPC.setHud,
   quit: IPC.quit
 } as const
 
 export type GuardedChannel = (typeof GUARDED_CHANNELS)[keyof typeof GUARDED_CHANNELS]
 
 export type GuardedHandler = (...args: unknown[]) => unknown
+
+/**
+ * 单向 `send` 通道（不带返回、不走 `DayfilmApi`）。契约（`src/shared/ipc.ts`）由主 Agent 维护，
+ * 这里只登记通道名，preload 与主进程共用，避免字符串漂移。
+ */
+export const HUD_OPEN_CHANNEL = 'dayfilm:hud-open'
+
+export const SEND_CHANNELS = {
+  hudOpen: HUD_OPEN_CHANNEL
+} as const
+
+export type SendChannel = (typeof SEND_CHANNELS)[keyof typeof SEND_CHANNELS]
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -45,6 +59,8 @@ export interface IpcDeps {
   getNote(date: unknown): string
   setNote(date: unknown, text: unknown): string
   saveImage(defaultName: unknown, pngBase64: unknown): Promise<{ path: string }> | { path: string }
+  exportEdl(date: unknown): Promise<{ path: string }> | { path: string }
+  setHud(visible: unknown): { visible: boolean }
   quit(): void
 }
 
@@ -61,6 +77,20 @@ export function createHandlers(deps: IpcDeps): Record<GuardedChannel, GuardedHan
     [IPC.getNote]: (date) => deps.getNote(date),
     [IPC.setNote]: (date, text) => deps.setNote(date, text),
     [IPC.saveImage]: (defaultName, pngBase64) => deps.saveImage(defaultName, pngBase64),
+    [IPC.exportEdl]: (date) => deps.exportEdl(date),
+    [IPC.setHud]: (visible) => deps.setHud(visible),
     [IPC.quit]: () => deps.quit()
+  }
+}
+
+export interface SendDeps {
+  /** HUD 被单击：打开并聚焦主窗口 */
+  hudOpen(): void
+}
+
+/** send 通道 → 实现；与 invoke 通道一样必须逐个登记，漏了就编译不过。 */
+export function createSendHandlers(deps: SendDeps): Record<SendChannel, GuardedHandler> {
+  return {
+    [HUD_OPEN_CHANNEL]: () => deps.hudOpen()
   }
 }

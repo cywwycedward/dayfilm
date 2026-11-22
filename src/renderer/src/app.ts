@@ -57,6 +57,8 @@ import {
 } from './paint-still'
 import { shotOrdinals } from './lib/still-frame'
 import { hashString } from './lib/hash'
+import { pickNarration, type Narration } from './lib/narration'
+import { TITLE_CARD_MS, shouldPlayTitleCard } from './lib/title-card'
 import { dayDensity, densityBars } from './lib/density'
 import { projectionFrameParams } from './lib/projection-frame'
 import { familyColor } from './lib/still-frame'
@@ -188,9 +190,11 @@ interface Ui {
   termInput: HTMLInputElement
   autoStart: HTMLInputElement
   pausedToggle: HTMLInputElement
+  hudToggle: HTMLInputElement
   quitBtn: HTMLButtonElement
   builtinTerms: HTMLElement
   exportPosterBtn: HTMLButtonElement
+  exportEdlBtn: HTMLButtonElement
   zoomIn: HTMLButtonElement
   zoomOut: HTMLButtonElement
   zoomFit: HTMLButtonElement
@@ -216,6 +220,12 @@ interface Ui {
   projectionCuts: HTMLElement
   projectionIndex: HTMLElement
   projectionTitle: HTMLElement
+  projectionSubtitle: HTMLElement
+  projectionSubtitleIndex: HTMLElement
+  projectionSubtitleText: HTMLElement
+  titleCard: HTMLElement
+  titleCardDate: HTMLElement
+  titleCardVerdict: HTMLElement
   projectionStrip: HTMLElement
   projectionStripCanvas: HTMLCanvasElement
   projectionHead: HTMLElement
@@ -361,9 +371,11 @@ function collect(root: HTMLElement): Ui {
     termInput: pick<HTMLInputElement>('termInput'),
     autoStart: pick<HTMLInputElement>('settingAutoStart'),
     pausedToggle: pick<HTMLInputElement>('settingPaused'),
+    hudToggle: pick<HTMLInputElement>('settingHud'),
     quitBtn: pick<HTMLButtonElement>('quitBtn'),
     builtinTerms: pick<HTMLElement>('builtinTerms'),
     exportPosterBtn: pick<HTMLButtonElement>('exportPoster'),
+    exportEdlBtn: pick<HTMLButtonElement>('exportEdl'),
     zoomIn: pick<HTMLButtonElement>('zoomIn'),
     zoomOut: pick<HTMLButtonElement>('zoomOut'),
     zoomFit: pick<HTMLButtonElement>('zoomFit'),
@@ -389,6 +401,12 @@ function collect(root: HTMLElement): Ui {
     projectionCuts: pick<HTMLElement>('projectionCuts'),
     projectionIndex: pick<HTMLElement>('projectionIndex'),
     projectionTitle: pick<HTMLElement>('projectionTitle'),
+    projectionSubtitle: pick<HTMLElement>('projectionSubtitle'),
+    projectionSubtitleIndex: pick<HTMLElement>('projectionSubtitleIndex'),
+    projectionSubtitleText: pick<HTMLElement>('projectionSubtitleText'),
+    titleCard: pick<HTMLElement>('titleCard'),
+    titleCardDate: pick<HTMLElement>('titleCardDate'),
+    titleCardVerdict: pick<HTMLElement>('titleCardVerdict'),
     projectionStrip: pick<HTMLElement>('projectionStrip'),
     projectionStripCanvas: pick<HTMLCanvasElement>('projectionStripCanvas'),
     projectionHead: pick<HTMLElement>('projectionHead'),
@@ -976,6 +994,45 @@ function longestShotSeconds(): number {
   return Math.max(1, longest)
 }
 
+/* 片头卡 --------------------------------------------------------------- */
+
+const titleCardSeen = new Set<string>()
+let titleCardTimer = 0
+let titleCardSwallow: ((event: KeyboardEvent) => void) | null = null
+
+function dismissTitleCard(): void {
+  if (ui.titleCard.hidden) return
+  window.clearTimeout(titleCardTimer)
+  ui.titleCard.hidden = true
+  ui.titleCard.classList.remove('is-playing')
+  if (titleCardSwallow) {
+    window.removeEventListener('keydown', titleCardSwallow, true)
+    titleCardSwallow = null
+  }
+}
+
+/** 进入有镜头的一天时播一次；同一天只播一次，Esc 跳过。 */
+function playTitleCard(): void {
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const hasShots = state.day.scenes.some((scene) => scene.kind === 'shot')
+  if (!hasShots || !shouldPlayTitleCard(titleCardSeen, state.date, reduced)) return
+  titleCardSeen.add(state.date)
+  // 上一张还在播时先收掉，避免两个定时器打架
+  dismissTitleCard()
+  ui.titleCardDate.textContent = fmtDateLabel(state.date, isoDate(Date.now()))
+  ui.titleCardVerdict.textContent = state.day.verdict.label
+  ui.titleCard.hidden = false
+  void ui.titleCard.offsetWidth
+  ui.titleCard.classList.add('is-playing')
+  titleCardSwallow = (event: KeyboardEvent): void => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.key === 'Escape') dismissTitleCard()
+  }
+  window.addEventListener('keydown', titleCardSwallow, true)
+  titleCardTimer = window.setTimeout(dismissTitleCard, TITLE_CARD_MS)
+}
+
 function paintProjectionFrame(animate: boolean): void {
   const canvas = ui.projectionFrame
   const rect = canvas.getBoundingClientRect()
@@ -1026,6 +1083,23 @@ function paintProjectionFrame(animate: boolean): void {
   ui.projectionIndex.textContent = `#${String(ordinal).padStart(2, '0')}`
   ui.projectionTitle.textContent = intermission ? '中场休息' : (scene?.title ?? '空档')
   ui.shotCounter.textContent = `SHOT ${String(Math.min(total, Math.max(1, ordinal))).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
+  updateSubtitle(scene ? pickNarration(state.day, scene, ordinal) : null)
+}
+
+let subtitleKey = ''
+
+/** 字幕只在镜头变化时更新，避免每帧重建文本节点。 */
+function updateSubtitle(narration: Narration | null): void {
+  const key = narration ? `${narration.index}:${narration.text}` : ''
+  if (key === subtitleKey) return
+  subtitleKey = key
+  if (!narration) {
+    ui.projectionSubtitle.hidden = true
+    return
+  }
+  ui.projectionSubtitle.hidden = false
+  ui.projectionSubtitleIndex.textContent = `第 ${narration.index} 镜`
+  ui.projectionSubtitleText.textContent = narration.text
 }
 
 function paintProjectionStrip(): void {
@@ -1224,6 +1298,7 @@ renderDates()
   updateZoomLevel()
   void loadNote(date)
   renderWeek()
+  if (state.mode === 'day') playTitleCard()
 }
 
 /** 空状态的文案：今天还没素材和历史某天没采样是两件事*/
@@ -1522,6 +1597,7 @@ function renderSettings(): void {
   ui.retention.value = String(settings.retentionDays)
   ui.autoStart.checked = settings.autoStart
   ui.pausedToggle.checked = settings.paused
+  ui.hudToggle.checked = settings.hud.visible
   const chips: HTMLElement[] = settings.redactTerms.map((term) => {
     const chip = node('span', 'term')
     chip.append(node('span', 'term__label', term))
@@ -1892,6 +1968,35 @@ async function exportPoster(): Promise<void> {
     toast(`海报导出失败：${messageOf(error)}`)
   } finally {
     ui.exportPosterBtn.disabled = false
+  }
+}
+
+async function exportEdlNow(): Promise<void> {
+  if (state.day.scenes.length === 0) {
+    toast('当天还没有素材，无法导出 EDL')
+    return
+  }
+  ui.exportEdlBtn.disabled = true
+  try {
+    const path = await state.source.exportEdl(state.date)
+    toast(path.length > 0 ? `EDL 已导出：${path}` : '已取消导出 EDL')
+  } catch (error) {
+    toast(`EDL 导出失败：${messageOf(error)}`)
+  } finally {
+    ui.exportEdlBtn.disabled = false
+  }
+}
+
+/** HUD 显隐走单独的通道（setHud），失败时把开关拨回去。 */
+async function applyHudVisible(visible: boolean): Promise<void> {
+  try {
+    const next = await state.source.setHud(visible)
+    state.settings = { ...state.settings, hud: { ...state.settings.hud, visible: next } }
+    ui.hudToggle.checked = next
+    setPanelStatus('已保存', 'ok')
+  } catch (error) {
+    ui.hudToggle.checked = !visible
+    setPanelStatus(`保存失败：${messageOf(error)}`, 'error')
   }
 }
 
@@ -2311,6 +2416,9 @@ ui.search.value = ''
   ui.pausedToggle.addEventListener('change', () => {
     void applySettings({ paused: ui.pausedToggle.checked })
   })
+  ui.hudToggle.addEventListener('change', () => {
+    void applyHudVisible(ui.hudToggle.checked)
+  })
   ui.quitBtn.addEventListener('click', () => {
     void quitApp()
   })
@@ -2334,6 +2442,9 @@ ui.search.value = ''
   )
   ui.exportPosterBtn.addEventListener('click', () => {
     void exportPoster()
+  })
+  ui.exportEdlBtn.addEventListener('click', () => {
+    void exportEdlNow()
   })
   ui.note.addEventListener('input', onNoteInput)
   ui.projectForm.addEventListener('submit', (event) => {

@@ -1,6 +1,6 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_SETTINGS, RETENTION_OPTIONS, type ProjectRule, type Settings } from '../../shared/settings'
+import { DEFAULT_SETTINGS, RETENTION_OPTIONS, type HudSettings, type ProjectRule, type Settings } from '../../shared/settings'
 import { describeError } from '../errors'
 
 const RETENTION_VALUES: readonly number[] = RETENTION_OPTIONS.map((option) => option.value)
@@ -63,17 +63,36 @@ function normalizeProjects(value: unknown): ProjectRule[] | null {
   return projects
 }
 
+/** HUD 坐标：缺省沿用 base；显式传了但不是有限数就当没拖过（null）。 */
+function normalizeHudCoord(value: unknown, fallback: number | null): number | null {
+  if (typeof value === 'undefined') return fallback
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+/** HUD 设置：不是对象则不接管（返回 null，调用方回落）；visible 用 Boolean()，坐标只收有限数。 */
+function normalizeHud(value: unknown, base: HudSettings): HudSettings | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  return {
+    visible: normalizeBool(record.visible, base.visible),
+    x: normalizeHudCoord(record.x, base.x),
+    y: normalizeHudCoord(record.y, base.y)
+  }
+}
+
 /** 字段级回落：缺失或类型不符的字段取 base 的同名字段。 */
 export function normalizeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
   const terms = normalizeTerms(record.redactTerms)
   const projects = normalizeProjects(record.projects)
+  const hud = normalizeHud(record.hud, base.hud)
   return {
     retentionDays: normalizeRetention(record.retentionDays, base.retentionDays),
     redactTerms: terms ?? [...base.redactTerms],
     autoStart: normalizeBool(record.autoStart, base.autoStart),
     paused: normalizeBool(record.paused, base.paused),
-    projects: projects ?? [...base.projects]
+    projects: projects ?? [...base.projects],
+    hud: hud ?? { ...base.hud }
   }
 }
 
@@ -154,12 +173,14 @@ export class SettingsStore {
     const record = patch as Record<string, unknown>
     const terms = 'redactTerms' in record ? normalizeTerms(record.redactTerms) : null
     const projects = 'projects' in record ? normalizeProjects(record.projects) : null
+    const hud = 'hud' in record ? normalizeHud(record.hud, current.hud) : null
     const next: Settings = {
       retentionDays: normalizeRetention(record.retentionDays, current.retentionDays),
       redactTerms: terms ?? current.redactTerms,
       autoStart: normalizeBool(record.autoStart, current.autoStart),
       paused: normalizeBool(record.paused, current.paused),
-      projects: projects ?? current.projects
+      projects: projects ?? current.projects,
+      hud: hud ?? { ...current.hud }
     }
     this.save(next)
     return next

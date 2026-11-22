@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { GUARDED_CHANNELS, createHandlers, parseDayRequest, type IpcDeps } from '../../src/main/ipc'
+import {
+  GUARDED_CHANNELS,
+  HUD_OPEN_CHANNEL,
+  SEND_CHANNELS,
+  createHandlers,
+  createSendHandlers,
+  parseDayRequest,
+  type IpcDeps
+} from '../../src/main/ipc'
 import { IPC } from '../../src/shared/ipc'
 import { DEFAULT_SETTINGS } from '../../src/shared/settings'
 import type { DayRollup, LiveState } from '../../src/shared/types'
@@ -48,6 +56,8 @@ function fakeDeps(): IpcDeps & { calls: Array<[string, unknown[]]> } {
     getNote: track('getNote', '今天拍得不错'),
     setNote: track('setNote', '今天拍得不错'),
     saveImage: track('saveImage', { path: '' }),
+    exportEdl: track('exportEdl', { path: '' }),
+    setHud: track('setHud', { visible: true }),
     quit: track('quit', undefined)
   }
 }
@@ -99,6 +109,8 @@ describe('IPC 通道表', () => {
     handlers[IPC.getNote]('2026-11-22')
     handlers[IPC.setNote]('2026-11-22', '加油')
     handlers[IPC.saveImage]('poster', 'iVBORw0KGgo=')
+    handlers[IPC.exportEdl]('2026-11-22')
+    handlers[IPC.setHud](false)
     handlers[IPC.quit]()
     expect(deps.calls).toEqual([
       ['getDay', ['2026-11-22']],
@@ -111,7 +123,37 @@ describe('IPC 通道表', () => {
       ['getNote', ['2026-11-22']],
       ['setNote', ['2026-11-22', '加油']],
       ['saveImage', ['poster', 'iVBORw0KGgo=']],
+      ['exportEdl', ['2026-11-22']],
+      ['setHud', [false]],
       ['quit', []]
     ])
+  })
+
+  it('导出失败的 rejection 不会被吞掉（会回到界面）', async () => {
+    const deps = fakeDeps()
+    deps.exportEdl = () => Promise.reject(new Error('EDL 保存失败：没有写入权限（EACCES）'))
+    const handlers = createHandlers(deps)
+    await expect(Promise.resolve(handlers[IPC.exportEdl]('2026-11-22'))).rejects.toThrow(
+      /EDL 保存失败：没有写入权限/
+    )
+  })
+})
+
+describe('单向 send 通道', () => {
+  it('send 通道登记在案且不与 invoke 通道撞名', () => {
+    const send = Object.values(SEND_CHANNELS)
+    const invoke = Object.values(GUARDED_CHANNELS)
+    expect(send).toEqual([HUD_OPEN_CHANNEL])
+    expect(send.filter((channel) => invoke.includes(channel as never))).toEqual([])
+    // 契约里的 tick 也是单向通道，不能被当成 invoke 包装
+    expect(invoke).not.toContain(IPC.tick)
+  })
+
+  it('每个 send 通道都有实现', () => {
+    const calls: string[] = []
+    const handlers = createSendHandlers({ hudOpen: () => calls.push('hudOpen') })
+    expect(Object.keys(handlers).sort()).toEqual([...Object.values(SEND_CHANNELS)].sort())
+    for (const channel of Object.values(SEND_CHANNELS)) handlers[channel]()
+    expect(calls).toEqual(['hudOpen'])
   })
 })
