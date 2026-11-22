@@ -1,4 +1,4 @@
-/** 界面主体：构建骨架、维护状态、把状态写到 DOM。数据只来自 DayfilmSource。 */
+/** 界面主体：构建骨架、维护状态、把状态写进 DOM。数据只来自 DayfilmSource。 */
 import type { DayRollup, LiveState, Scene } from '../../shared/types'
 import {
   BUILTIN_REDACT_TERMS,
@@ -29,7 +29,9 @@ import {
   DAY_MS as DAY_MS_FROM_ZOOM,
   clampView,
   ensureVisible,
+  fitView,
   fullDay,
+  nowLabelSide,
   layoutInView,
   offsetInView,
   ticksInView,
@@ -46,7 +48,35 @@ import {
   isoDate,
   startOfDay
 } from './lib/time'
-import { paintPoster, paintReel, paintWeekBars, sizeCanvas, stillDataUrl } from './paint'
+import { paintDensity, paintPoster, paintReel, paintWeekBars, sizeCanvas } from './paint'
+import {
+  onStillFontsReady,
+  paintProjectionBoard,
+  paintProjectionGap,
+  stillDataUrl
+} from './paint-still'
+import { shotOrdinals } from './lib/still-frame'
+import { hashString } from './lib/hash'
+import { dayDensity, densityBars } from './lib/density'
+import { projectionFrameParams } from './lib/projection-frame'
+import { familyColor } from './lib/still-frame'
+import { exeHue } from './lib/still'
+import { createProjectorAudio } from './projection-audio'
+import {
+  EMPTY_PROJECTION,
+  advanceProjection,
+  cutsPerSecond,
+  enterProjection,
+  exitProjection,
+  filmBounds,
+  projectionFinished,
+  playbackRange,
+  playbackStart,
+  setProjectionSound,
+  setProjectionSpeed,
+  showCutRate,
+  type ProjectionState
+} from './lib/projection'
 import { followDate } from './lib/date-follow'
 import { revealScrollTop, windowRange } from './lib/window'
 
@@ -77,26 +107,26 @@ interface State {
   speed: Speed
   playhead: number
   settings: Settings
-  /** 设置是否已从主进程读回；未读回时面板显示加载中 */
+  /** 设置是否已从主进程读回；未读回时面板显示加载*/
   settingsReady: boolean
   panelOpen: boolean
   /** 用户主动选了历史日期；true 时跨零点不把视图拉回今天 */
   browsingHistory: boolean
-  /** 已为哪一天补拉过日期列表，避免同一天反复刷新 */
+  /** 已为哪一天补拉过日期列表，避免同一天反复刷*/
   datesRefreshedFor: string | null
-  /** 胶片视窗（缩放与平移） */
+  /** 胶片视窗（缩放与平移*/
   view: TimeView
-  /** 最近 7 天的日期与汇总，用于周视图 */
+  /** 最7 天的日期与汇总，用于周视*/
   weekDates: string[]
   weekDays: (DayRollup | null)[]
-  /** 当前日期的导演手记 */
+  /** 当前日期的导演手*/
   note: string
   noteSaved: string
-  /** day = 胶片视图，week = 一周电影 */
+  /** day = 胶片视图，week = 一周电*/
   mode: 'day' | 'week'
   /** 周模式当前显示的周的周一 */
   weekMonday: string
-  /** 周模式的数据缓存：日期 → 当天汇总（null 表示读取失败/没有数据） */
+  /** 周模式的数据缓存：日当天汇总（null 表示读取失败/没有数据*/
   weekCache: Map<string, DayRollup | null>
   weekThisDays: WeekDay[]
   weekLastDays: WeekDay[]
@@ -163,8 +193,11 @@ interface Ui {
   exportPosterBtn: HTMLButtonElement
   zoomIn: HTMLButtonElement
   zoomOut: HTMLButtonElement
+  zoomFit: HTMLButtonElement
   zoomReset: HTMLButtonElement
   zoomLevel: HTMLElement
+  density: HTMLElement
+  densityCanvas: HTMLCanvasElement
   week: HTMLElement
   note: HTMLTextAreaElement
   noteCount: HTMLElement
@@ -175,6 +208,19 @@ interface Ui {
   projectName: HTMLInputElement
   projectTerms: HTMLInputElement
   highlights: HTMLElement
+  projection: HTMLElement
+  projectionStage: HTMLElement
+  projectionFrame: HTMLCanvasElement
+  shotCounter: HTMLElement
+  projectionClock: HTMLElement
+  projectionCuts: HTMLElement
+  projectionIndex: HTMLElement
+  projectionTitle: HTMLElement
+  projectionStrip: HTMLElement
+  projectionStripCanvas: HTMLCanvasElement
+  projectionHead: HTMLElement
+  soundToggle: HTMLButtonElement
+  exitProjection: HTMLButtonElement
   modeDay: HTMLButtonElement
   modeWeek: HTMLButtonElement
   weekFilm: HTMLElement
@@ -198,8 +244,6 @@ let trackRect: DOMRect | null = null
 let reelKey = ''
 let frameKey = ''
 let timecodeKey = ''
-let raf = 0
-let lastFrameTime = 0
 let lastPlayheadX = -1
 let lastNowX = -1
 let searchTimer = 0
@@ -213,6 +257,11 @@ let panelStatusTimer = 0
 let noteTimer = 0
 let drag: { x: number; startMs: number; moved: boolean } | null = null
 let appRoot: HTMLElement | null = null
+let projection: ProjectionState = EMPTY_PROJECTION
+let projectionRaf = 0
+let projectionLast = 0
+let projectionCutsText = ''
+const projectorAudio = createProjectorAudio()
 
 function dayStart(): number {
   return startOfDay(state.date)
@@ -226,7 +275,7 @@ function isToday(): boolean {
   return state.date === isoDate(Date.now())
 }
 
-/** 回放的上界：今天到"现在"，历史日到最后一个镜头。 */
+/** 回放的上界：今天现在"，历史日到最后一个镜头*/
 function dayEnd(): number {
   const start = dayStart()
   const floor = start + 60_000
@@ -317,8 +366,11 @@ function collect(root: HTMLElement): Ui {
     exportPosterBtn: pick<HTMLButtonElement>('exportPoster'),
     zoomIn: pick<HTMLButtonElement>('zoomIn'),
     zoomOut: pick<HTMLButtonElement>('zoomOut'),
+    zoomFit: pick<HTMLButtonElement>('zoomFit'),
     zoomReset: pick<HTMLButtonElement>('zoomReset'),
     zoomLevel: pick<HTMLElement>('zoomLevel'),
+    density: pick<HTMLElement>('densityWrap'),
+    densityCanvas: pick<HTMLCanvasElement>('densityCanvas'),
     week: pick<HTMLElement>('week'),
     note: pick<HTMLTextAreaElement>('note'),
     noteCount: pick<HTMLElement>('noteCount'),
@@ -329,6 +381,19 @@ function collect(root: HTMLElement): Ui {
     projectName: pick<HTMLInputElement>('projectName'),
     projectTerms: pick<HTMLInputElement>('projectTerms'),
     highlights: pick<HTMLElement>('highlights'),
+    projection: pick<HTMLElement>('projection'),
+    projectionStage: pick<HTMLElement>('projectionStage'),
+    projectionFrame: pick<HTMLCanvasElement>('projectionFrame'),
+    shotCounter: pick<HTMLElement>('shotCounter'),
+    projectionClock: pick<HTMLElement>('projectionClock'),
+    projectionCuts: pick<HTMLElement>('projectionCuts'),
+    projectionIndex: pick<HTMLElement>('projectionIndex'),
+    projectionTitle: pick<HTMLElement>('projectionTitle'),
+    projectionStrip: pick<HTMLElement>('projectionStrip'),
+    projectionStripCanvas: pick<HTMLCanvasElement>('projectionStripCanvas'),
+    projectionHead: pick<HTMLElement>('projectionHead'),
+    soundToggle: pick<HTMLButtonElement>('soundToggle'),
+    exitProjection: pick<HTMLButtonElement>('exitProjection'),
     modeDay: pick<HTMLButtonElement>('modeDay'),
     modeWeek: pick<HTMLButtonElement>('modeWeek'),
     weekFilm: pick<HTMLElement>('weekFilm'),
@@ -356,7 +421,7 @@ function renderRuler(): void {
   ui.ruler.replaceChildren(
     ...ticks.map((ts) => {
       const x = offsetInView(ts, state.view, width)
-      // 一天最后一个刻度写成 24:00，而不是下一天的 00:00
+      // 一天最后一个刻度写24:00，而不是下一天的 00:00
       const tick = node('span', 'ruler__tick', ts === dayEnd ? '24:00' : fmtClock(ts))
       tick.style.left = `${Math.min(width, Math.max(0, x))}px`
       let align = 'mid'
@@ -370,8 +435,8 @@ function renderRuler(): void {
 
 function renderDates(): void {
   const today = isoDate(Date.now())
-  // 今天可能还没有日文件：即使主进程没返回今天，也要让下拉框里有它
-  const dates = state.dates.includes(state.date) ? state.dates : [state.date, ...state.dates]
+  // 今天可能还没有日文件：即使主进程没返回今天，也要让下拉框里有
+const dates = state.dates.includes(state.date) ? state.dates : [state.date, ...state.dates]
   ui.date.replaceChildren(
     ...dates.map((date) => {
       const option = node('option', undefined, fmtDateLabel(date, today))
@@ -382,7 +447,7 @@ function renderDates(): void {
   ui.date.value = state.date
 }
 
-/** 重新拉一次日期列表（跨零点、保留期变更后）。失败时保留旧列表。 */
+/** 重新拉一次日期列表（跨零点、保留期变更后）。失败时保留旧列表*/
 async function refreshDates(): Promise<void> {
   try {
     state.dates = await state.source.listDays()
@@ -396,11 +461,14 @@ function renderLive(): void {
   const live = state.live
   const captureError = live?.captureError ?? null
   const storageError = live?.storageError ?? null
-  // 用户主动暂停，或子进程没在跑又没报错，都当“已暂停”
-  const paused = live !== null && (live.paused || (!live.capturing && captureError === null))
+  // 用户主动暂停，或子进程没在跑又没报错，都当“已暂停
+const paused = live !== null && (live.paused || (!live.capturing && captureError === null))
   const scene = live?.scene ?? null
 
-  ui.liveDot.dataset.state = paused ? 'paused' : scene ? 'shooting' : 'idle'
+  let liveDotState: 'idle' | 'shooting' | 'paused' = 'idle'
+  if (paused) liveDotState = 'paused'
+  else if (scene) liveDotState = 'shooting'
+  ui.liveDot.dataset.state = liveDotState
   if (paused) {
     ui.liveText.textContent = '已暂停'
   } else if (scene) {
@@ -420,7 +488,7 @@ function renderLive(): void {
   ui.storageText.textContent = storageError ?? ''
 
   // 采集错误优先于暂停：出错时 chip 必须是红的
-  let status: 'ok' | 'paused' | 'error' = 'ok'
+let status: 'ok' | 'paused' | 'error' = 'ok'
   if (captureError !== null) status = 'error'
   else if (paused) status = 'paused'
   ui.chip.dataset.state = status
@@ -433,7 +501,7 @@ function renderLive(): void {
 function updateElapsed(): void {
   const live = state.live
   // 暂停时不给“已持续”继续跳：用最后一帧 tick 的时间
-  const now = live?.paused === true ? live.now : effectiveNow()
+const now = live?.paused === true ? live.now : effectiveNow()
   const scene = live?.scene ?? null
   const since = scene ? scene.start : (live?.day.lastAt ?? now)
   ui.elapsed.textContent = fmtElapsed(Math.max(0, now - since))
@@ -460,6 +528,12 @@ function measure(): void {
     windowSignature = ''
     renderWindow()
   }
+  // 放映中改窗口尺寸：重画大画面与底部细
+if (projection.active) {
+    paintProjectionFrame(false)
+    paintProjectionStrip()
+    updateProjectionChrome()
+  }
 }
 
 /** 行高由 CSS 变量 --row-stride 定义，只在尺寸变化时读一次。 */
@@ -467,6 +541,33 @@ function readRowStride(): number {
   const raw = getComputedStyle(ui.listScroll).getPropertyValue('--row-stride')
   const value = Number.parseFloat(raw)
   return Number.isFinite(value) && value > 0 ? value : FALLBACK_ROW_STRIDE
+}
+
+/** 当天镜次表（只数 shot），按日数量缓存，回放时不会每帧重算*/
+let ordinalKey = ''
+let ordinalMap: Map<string, number> = new Map()
+function dayOrdinals(): ReadonlyMap<string, number> {
+  const scenes = state.day.scenes
+  const key = `${state.date}|${scenes.length}`
+  if (key !== ordinalKey) {
+    ordinalKey = key
+    ordinalMap = shotOrdinals(scenes)
+  }
+  return ordinalMap
+}
+
+function paintDensityCanvas(): void {
+  if (trackWidth <= 0) return
+  const height = ui.density.clientHeight
+  if (height <= 0) return
+  const ctx = sizeCanvas(ui.densityCanvas, trackWidth, height)
+  if (!ctx) return
+  paintDensity(
+    ctx,
+    densityBars(dayDensity(state.day.scenes, dayStart()), state.view, trackWidth, dayStart()),
+    trackWidth,
+    height
+  )
 }
 
 function renderReel(): void {
@@ -478,8 +579,8 @@ function renderReel(): void {
   const materialStartX = first === null ? trackWidth : xOf(first)
   const materialEndX = last === null ? 0 : xOf(last)
   const nowX = state.day.scenes.length > 0 && isToday() ? xOf(effectiveNow()) : -1
-  // 只在胶片真变了才重画：空闲时 tick 不带新镜头，不重绘
-  const key = `${state.selectedId}|${state.day.scenes.length}|${first}|${last}|${Math.round(nowX)}|${Math.round(view.startMs)}|${Math.round(view.spanMs)}|${trackWidth}x${trackHeight}`
+  // 只在胶片真变了才重画：空闲时 tick 不带新镜头，不重
+const key = `${state.selectedId}|${state.day.scenes.length}|${first}|${last}|${Math.round(nowX)}|${Math.round(view.startMs)}|${Math.round(view.spanMs)}|${trackWidth}x${trackHeight}`
   if (key === reelKey) return
   reelKey = key
   const ctx = sizeCanvas(ui.canvas, trackWidth, trackHeight)
@@ -488,11 +589,24 @@ function renderReel(): void {
     selectedId: state.selectedId,
     materialStartX,
     materialEndX,
-    nowX
+    nowX,
+    date: state.date,
+    ordinals: dayOrdinals()
   })
+  paintDensityCanvas()
 }
 
-/** 只写 transform，不读布局；回放时每帧只动这两个指针。视窗外的指针直接隐藏。 */
+/** 只写 transform，不读布局；回放时每帧只动这两个指针。视窗外的指针直接隐藏*/
+/** “现在”标签的宽度：量一次后缓存，贴边时向左翻转用。 */
+let nowLabelPx = 0
+function nowLabelWidth(): number {
+  if (nowLabelPx > 0) return nowLabelPx
+  const em = ui.nowMark.querySelector('em')
+  const width = em instanceof HTMLElement ? em.offsetWidth : 0
+  if (width > 0) nowLabelPx = width + 10
+  return nowLabelPx > 0 ? nowLabelPx : 46
+}
+
 function updateMarkers(): void {
   if (trackWidth <= 0) return
   const view = state.view
@@ -505,7 +619,7 @@ function updateMarkers(): void {
   if (nowVisible && Math.abs(nowX - lastNowX) > 0.5) {
     lastNowX = nowX
     ui.nowMark.style.transform = `translate3d(${nowX}px,0,0)`
-    ui.nowMark.dataset.side = nowX > trackWidth - 60 ? 'left' : 'right'
+    ui.nowMark.dataset.side = nowLabelSide(nowX, nowLabelWidth(), trackWidth)
   }
   const hidePlayhead = !playheadVisible || (nowVisible && !state.playing && Math.abs(playheadX - nowX) < 1.5)
   if (ui.playhead.hidden !== hidePlayhead) ui.playhead.hidden = hidePlayhead
@@ -550,6 +664,7 @@ function renderSummary(): void {
           const bar = node('span', 'rank__bar')
           const fill = node('i')
           fill.style.width = `${peak > 0 ? (app.seconds / peak) * 100 : 0}%`
+          fill.style.background = familyColor(exeHue(app.exe), 0.6)
           bar.append(fill)
           row.append(
             node('span', 'rank__name', app.exe),
@@ -564,7 +679,7 @@ function renderSummary(): void {
   renderProjectTotals(day)
 }
 
-/** 汇总面板的项目分区：没有规则时给一句引导，有规则时按命中时长倒序前 5。 */
+/** 汇总面板的项目分区：没有规则时给一句引导，有规则时按命中时长倒序5*/
 function renderProjectTotals(day: DayRollup): void {
   const rules = state.settings.projects
   if (rules.length === 0) {
@@ -596,7 +711,13 @@ function renderProjectTotals(day: DayRollup): void {
   )
 }
 
-function buildRow(scene: Scene, withDate: boolean, index: number, total: number): HTMLLIElement {
+function buildRow(
+  scene: Scene,
+  withDate: boolean,
+  index: number,
+  total: number,
+  ordinals: ReadonlyMap<string, number>
+): HTMLLIElement {
   const item = node('li', 'shot-row')
   item.setAttribute('aria-setsize', String(total))
   item.setAttribute('aria-posinset', String(index + 1))
@@ -607,7 +728,13 @@ function buildRow(scene: Scene, withDate: boolean, index: number, total: number)
   const thumb = node('span', 'shot__thumb')
   if (scene.kind === 'shot') {
     const img = node('img')
-    img.src = stillDataUrl(scene.exe, scene.title)
+    img.src = stillDataUrl(
+      { exe: scene.exe, title: scene.title, kind: scene.kind },
+      ordinals.get(scene.id) ?? 0,
+      isoDate(scene.start),
+      64,
+      36
+    )
     img.alt = ''
     img.loading = 'lazy'
     thumb.append(img)
@@ -633,7 +760,7 @@ function buildRow(scene: Scene, withDate: boolean, index: number, total: number)
   return item
 }
 
-/** 列表当前展示的数据：检索结果或当天胶片。 */
+/** 列表当前展示的数据：检索结果或当天胶片*/
 function visibleScenes(): readonly Scene[] {
   return state.results ?? state.day.scenes
 }
@@ -663,7 +790,7 @@ function renderList(): void {
   renderWindow()
 }
 
-/** 只把可视区加缓冲内的行渲染出来；其余行由 spacer 高度占位。 */
+/** 只把可视区加缓冲内的行渲染出来；其余行由 spacer 高度占位*/
 function renderWindow(): void {
   const scenes = visibleScenes()
   const range = windowRange({
@@ -684,10 +811,21 @@ function renderWindow(): void {
   const rows: HTMLLIElement[] = []
   for (let index = range.start; index < range.end; index += 1) {
     const scene = scenes[index]
-    rows.push(buildRow(scene, withDate && isoDate(scene.start) !== today, index, scenes.length))
+    rows.push(
+      buildRow(
+        scene,
+        withDate && isoDate(scene.start) !== today,
+        index,
+        scenes.length,
+        dayOrdinals()
+      )
+    )
   }
   ui.list.replaceChildren(...rows)
   highlight()
+  // 数据变少后不要停在越界的滚动位置
+  const maxScroll = Math.max(0, ui.spacer.offsetHeight - ui.listScroll.clientHeight)
+  if (ui.listScroll.scrollTop > maxScroll) ui.listScroll.scrollTop = maxScroll
 }
 
 /** 把某一行滚进视野（虚拟列表下不能依赖 scrollIntoView）。 */
@@ -727,15 +865,23 @@ function updateTransport(): void {
       ui.frameBox.dataset.kind = intermission ? 'intermission' : 'shot'
       ui.frameTag.hidden = !intermission
       if (intermission) ui.frame.removeAttribute('src')
-      else ui.frame.src = stillDataUrl(scene.exe, scene.title)
+      else {
+        ui.frame.src = stillDataUrl(
+          { exe: scene.exe, title: scene.title, kind: scene.kind },
+          dayOrdinals().get(scene.id) ?? 0,
+          isoDate(scene.start),
+          128,
+          72
+        )
+      }
       ui.frameTitle.textContent = intermission ? '中场休息' : scene.title
       ui.frameSub.textContent = intermission
         ? `${fmtClock(scene.start)}–${fmtClock(scene.end)} · ${fmtDuration(scene.seconds)}`
         : `${scene.exe} · ${fmtClock(scene.start)}–${fmtClock(scene.end)} · ${fmtDuration(scene.seconds)}`
     }
   } else {
-    // 指针落在没有镜头的时段：既不冒充上一个镜头，也不冒充空白的一天
-    const next = state.day.scenes.find((item) => item.start > state.playhead) ?? null
+    // 指针落在没有镜头的时段：既不冒充上一个镜头，也不冒充空白的一
+const next = state.day.scenes.find((item) => item.start > state.playhead) ?? null
     const key = `gap:${next?.id ?? 'end'}:${state.day.scenes.length}`
     if (key !== frameKey) {
       frameKey = key
@@ -754,6 +900,12 @@ function updateTransport(): void {
     }
   }
 
+  // 进度条只跨素材区间，标签仍显示真实时刻
+  const material = playbackRange(state.day.scenes)
+  const min = material ? Math.max(0, Math.floor((material.start - dayStart()) / 60_000)) : 0
+  const max = material ? Math.max(min + 1, Math.ceil((material.end - dayStart()) / 60_000)) : 1440
+  if (ui.scrub.min !== String(min)) ui.scrub.min = String(min)
+  if (ui.scrub.max !== String(max)) ui.scrub.max = String(max)
   const minutes = String(Math.round((state.playhead - dayStart()) / 60_000))
   if (ui.scrub.value !== minutes) ui.scrub.value = minutes
   const code = `${fmtClock(state.playhead)} / 24:00`
@@ -788,47 +940,215 @@ function toast(message: string): void {
 }
 
 function pause(): void {
+  if (projection.active) {
+    stopProjection()
+    return
+  }
   state.playing = false
   ui.playBtn.textContent = '播放'
   ui.playBtn.dataset.state = 'paused'
-  cancelAnimationFrame(raf)
 }
 
-function step(now: number): void {
-  if (!state.playing) return
-  const delta = Math.min(200, Math.max(0, now - lastFrameTime))
-  lastFrameTime = now
-  state.playhead = Math.min(dayEnd(), state.playhead + delta * state.speed)
-  updateMarkers()
-  updateTransport()
-  if (state.playhead >= dayEnd()) {
-    pause()
-    return
-  }
-  raf = requestAnimationFrame(step)
+/* 放映：进入后才算“播放”，胶片收细、中央放大画---------------------------------- */
+
+function currentProjectionScene(): Scene | null {
+  return sceneAt(projection.filmMs, state.day.scenes)
 }
 
-function togglePlay(): void {
-  if (state.playing) {
-    pause()
+/** 放映画面上的镜次：取该时刻之前最后一个镜头的序号。 */
+function shotOrdinalFor(ts: number): number {
+  const ordinals = dayOrdinals()
+  let ordinal = 1
+  for (const scene of state.day.scenes) {
+    if (scene.kind !== 'shot') continue
+    if (scene.start > ts) break
+    ordinal = ordinals.get(scene.id) ?? ordinal
+  }
+  return ordinal
+}
+
+/** 当天最长镜头的秒数：时长尺的分母。 */
+function longestShotSeconds(): number {
+  let longest = 0
+  for (const scene of state.day.scenes) {
+    if (scene.kind === 'shot') longest = Math.max(longest, scene.seconds)
+  }
+  return Math.max(1, longest)
+}
+
+function paintProjectionFrame(animate: boolean): void {
+  const canvas = ui.projectionFrame
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
+  const ctx = sizeCanvas(canvas, rect.width, rect.height)
+  if (!ctx) return
+  const scene = currentProjectionScene()
+  // 帧内镜次与说明行用同一个序号：空隙/中场休息时指向刚结束的那一镜
+  const ordinal = shotOrdinalFor(projection.filmMs)
+  if (scene) {
+    const intermission = scene.kind === 'intermission'
+    paintProjectionBoard(
+      ctx,
+      projectionFrameParams({
+        date: state.date,
+        shot: ordinal,
+        total: projection.total,
+        exe: intermission ? '中场休息' : scene.exe,
+        title: intermission ? '中场休息' : scene.title,
+        hue: exeHue(scene.exe.length > 0 ? scene.exe : '中场休息'),
+        showBar: !intermission,
+        start: scene.start,
+        end: scene.end,
+        seconds: scene.seconds,
+        maxSeconds: longestShotSeconds(),
+        grainSeed: hashString(scene.id),
+        width: rect.width,
+        height: rect.height
+      })
+    )
+  } else {
+    const next = state.day.scenes.find((item) => item.start > projection.filmMs)
+    paintProjectionGap(
+      ctx,
+      rect.width,
+      rect.height,
+      next ? `空档 · 下一镜 ${fmtClock(next.start)}` : '这一天的胶片到此结束'
+    )
+  }
+  if (animate) {
+    ui.projectionStage.classList.remove('is-cutting')
+    void ui.projectionStage.offsetWidth
+    ui.projectionStage.classList.add('is-cutting')
+    window.setTimeout(() => ui.projectionStage.classList.remove('is-cutting'), 160)
+  }
+  const intermission = scene?.kind === 'intermission'
+  const total = Math.max(1, projection.total)
+  ui.projectionIndex.textContent = `#${String(ordinal).padStart(2, '0')}`
+  ui.projectionTitle.textContent = intermission ? '中场休息' : (scene?.title ?? '空档')
+  ui.shotCounter.textContent = `SHOT ${String(Math.min(total, Math.max(1, ordinal))).padStart(2, '0')} / ${String(total).padStart(2, '0')}`
+}
+
+function paintProjectionStrip(): void {
+  const canvas = ui.projectionStripCanvas
+  const rect = canvas.getBoundingClientRect()
+  if (rect.width <= 0 || rect.height <= 0) return
+  const ctx = sizeCanvas(canvas, rect.width, rect.height)
+  if (!ctx) return
+  ctx.clearRect(0, 0, rect.width, rect.height)
+  const bounds = filmBounds(state.day.scenes)
+  if (!bounds) return
+  const span = bounds.end - bounds.start
+  for (const scene of state.day.scenes) {
+    if (scene.kind !== 'shot') continue
+    const x = ((scene.start - bounds.start) / span) * rect.width
+    const w = Math.max(1, ((scene.end - scene.start) / span) * rect.width)
+    const played = scene.end <= projection.filmMs
+    ctx.fillStyle = familyColor(exeHue(scene.exe), played ? 0.85 : 0.2)
+    ctx.fillRect(x, 0, w, rect.height)
+  }
+}
+
+function updateProjectionChrome(): void {
+  const bounds = filmBounds(state.day.scenes)
+  if (bounds) {
+    const ratio = (projection.filmMs - bounds.start) / Math.max(1, bounds.end - bounds.start)
+    const width = ui.projectionStrip.clientWidth
+    ui.projectionHead.style.transform = `translateX(${Math.round(Math.min(1, Math.max(0, ratio)) * width)}px)`
+  }
+  ui.projectionClock.textContent = fmtClock(projection.filmMs)
+  const rate = showCutRate(projection.speed) ? `每秒 ${cutsPerSecond(projection).toFixed(1)} 次剪辑` : ''
+  if (rate !== projectionCutsText) {
+    projectionCutsText = rate
+    ui.projectionCuts.textContent = rate
+    ui.projectionCuts.hidden = rate.length === 0
+  }
+}
+
+function onProjectionCut(): void {
+  paintProjectionFrame(true)
+  paintProjectionStrip()
+  ui.projectionStage.classList.remove('is-cut')
+  void ui.projectionStage.offsetWidth
+  ui.projectionStage.classList.add('is-cut')
+  window.setTimeout(() => ui.projectionStage.classList.remove('is-cut'), 90)
+  projectorAudio.click()
+}
+
+function startProjection(): void {
+  const selected = state.selectedId
+    ? (state.day.scenes.find((scene) => scene.id === state.selectedId) ?? null)
+    : null
+  const from = playbackStart(selected, state.day.scenes)
+  if (from === null) {
+    toast('这一天没有素材，无法放映')
+    announce('这一天没有素材，无法放映')
     return
   }
-  if (state.day.scenes.length === 0) return
-  // 停在“现在”时没有可播的前方，按回放的意思从 00:00 重新放起
-  if (dayEnd() - state.playhead < 60_000) {
-    state.playhead = dayStart()
-    announce('从 00:00 开始回放')
-  }
+  projection = enterProjection(from, state.day.scenes, { speed: state.speed, sound: projection.sound })
+  if (projection.total === 0) return
   state.playing = true
   ui.playBtn.textContent = '暂停'
   ui.playBtn.dataset.state = 'playing'
-  lastFrameTime = performance.now()
-  raf = requestAnimationFrame(step)
+  ui.projection.hidden = false
+  ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
+  ui.soundToggle.setAttribute('aria-pressed', String(projection.sound))
+  projectorAudio.setEnabled(projection.sound)
+  paintProjectionFrame(false)
+  paintProjectionStrip()
+  updateProjectionChrome()
+  projectionLast = performance.now()
+  projectionRaf = requestAnimationFrame(projectionStep)
+  // 遮罩刚显示时量不到尺寸，下一帧补一
+requestAnimationFrame(() => {
+    if (!projection.active) return
+    paintProjectionFrame(false)
+    paintProjectionStrip()
+    updateProjectionChrome()
+  })
+}
+
+function stopProjection(): void {
+  if (!projection.active) return
+  const endedAt = projection.filmMs
+  projection = exitProjection(projection)
+  cancelAnimationFrame(projectionRaf)
+  projectorAudio.dispose()
+  ui.projection.hidden = true
+  state.playing = false
+  ui.playBtn.textContent = '播放'
+  ui.playBtn.dataset.state = 'paused'
+  state.playhead = Math.min(dayEnd(), Math.max(dayStart(), endedAt))
+  lastPlayheadX = -1
+  lastNowX = -1
+  renderReel()
+  renderRuler()
+  updateMarkers()
+  updateTransport()
+}
+
+function projectionStep(now: number): void {
+  if (!projection.active) return
+  const delta = Math.min(120, Math.max(0, now - projectionLast))
+  projectionLast = now
+  const before = projection.shot
+  projection = advanceProjection(projection, delta, state.day.scenes)
+  if (projection.shot !== before) onProjectionCut()
+  updateProjectionChrome()
+  const material = playbackRange(state.day.scenes)
+  if (projectionFinished(projection, state.day.scenes) || (material !== null && projection.filmMs >= material.end)) {
+    stopProjection()
+    return
+  }
+  projectionRaf = requestAnimationFrame(projectionStep)
+}
+
+function togglePlay(): void {
+  if (projection.active) stopProjection()
+  else startProjection()
 }
 
 function seek(ts: number): void {
   state.playhead = Math.min(dayEnd(), Math.max(dayStart(), ts))
-  if (state.playing) lastFrameTime = performance.now()
   updateMarkers()
   updateTransport()
 }
@@ -842,8 +1162,8 @@ function selectScene(scene: Scene): void {
   state.selectedId = scene.id
   pause()
   state.playhead = Math.min(dayEnd(), Math.max(dayStart(), scene.start))
-  // 选中镜头一定要在视窗里，缩放后也一样
-  state.view = ensureVisible(state.view, scene.start, scene.end, dayStart())
+  // 选中镜头一定要在视窗里，缩放后也一
+state.view = ensureVisible(state.view, scene.start, scene.end, dayStart())
   lastPlayheadX = -1
   lastNowX = -1
   renderReel()
@@ -869,7 +1189,7 @@ async function locate(scene: Scene): Promise<void> {
   revealRow(scene.id, 'nearest')
 }
 
-/** 换日期或换检索结果时回到列表顶部，否则会停在上一份数据的位置。 */
+/** 换日期或换检索结果时回到列表顶部，否则会停在上一份数据的位置*/
 function resetListScroll(): void {
   ui.listScroll.scrollTop = 0
   listSignature = ''
@@ -877,11 +1197,12 @@ function resetListScroll(): void {
 }
 
 async function loadDate(date: string): Promise<void> {
+  if (projection.active) stopProjection()
   state.date = date
-  // 主动翻到非今天 = 浏览历史，跨零点也不再拉回视图
-  state.browsingHistory = date !== isoDate(Date.now())
-  // 下拉框的选项里永远包含当前日期：没有日文件的天也能选中并显示
-  renderDates()
+  // 主动翻到非今= 浏览历史，跨零点也不再拉回视
+state.browsingHistory = date !== isoDate(Date.now())
+  // 下拉框的选项里永远包含当前日期：没有日文件的天也能选中并显
+renderDates()
   state.day = await state.source.getDay(date)
   state.selectedId = null
   pause()
@@ -905,7 +1226,7 @@ async function loadDate(date: string): Promise<void> {
   renderWeek()
 }
 
-/** 空状态的文案：今天还没素材和历史某天没采样是两件事。 */
+/** 空状态的文案：今天还没素材和历史某天没采样是两件事*/
 function emptyCopy(): string {
   return isToday() ? '还没有拍摄任何素材' : '这一天没有采样'
 }
@@ -1055,6 +1376,8 @@ function onTrackKey(event: KeyboardEvent): void {
 
 function setSpeed(speed: Speed): void {
   state.speed = speed
+  // 放映中也跟着换倍速，不用退出再
+if (projection.active) projection = setProjectionSpeed(projection, speed)
   for (const button of ui.speedBtns) {
     const active = Number(button.dataset.speed) === speed
     button.classList.toggle('is-active', active)
@@ -1182,7 +1505,7 @@ function setPanelStatus(text: string, kind: 'idle' | 'ok' | 'error'): void {
   }
 }
 
-/** 保留期选项与内置脱敏词都是合同里给的常量，这里只渲染一次。 */
+/** 保留期选项与内置脱敏词都是合同里给的常量，这里只渲染一次*/
 function renderSettingsStatic(): void {
   ui.retention.replaceChildren(
     ...RETENTION_OPTIONS.map((option) => {
@@ -1233,7 +1556,7 @@ async function loadSettings(): Promise<void> {
   }
 }
 
-/** 提交设置。失败时回到提交前的值并报错，不假装保存成功。 */
+/** 提交设置。失败时回到提交前的值并报错，不假装保存成功*/
 async function applySettings(patch: Partial<Settings>): Promise<boolean> {
   const before = state.settings
   try {
@@ -1291,11 +1614,11 @@ function closePanel(): void {
   ui.drawer.hidden = true
   ui.settingsBtn.setAttribute('aria-expanded', 'false')
   setPanelStatus('', 'idle')
-  // 触发按钮只有一个：关闭后把焦点固定还给它
-  ui.settingsBtn.focus({ preventScroll: true })
+  // 触发按钮只有一个：关闭后把焦点固定还给
+ui.settingsBtn.focus({ preventScroll: true })
 }
 
-/** Esc 关闭；Tab 在面板内循环，不跑到背后的界面上。 */
+/** Esc 关闭；Tab 在面板内循环，不跑到背后的界面上*/
 function onPanelKey(event: KeyboardEvent): void {
   if (!state.panelOpen) return
   if (event.key === 'Escape') {
@@ -1349,7 +1672,7 @@ function removeTerm(term: string): void {
   void applySettings({ redactTerms: state.settings.redactTerms.filter((item) => item !== term) })
 }
 
-/** 滚动只在下一帧重算可见区间，不在滚动事件里同步读写布局。 */
+/** 滚动只在下一帧重算可见区间，不在滚动事件里同步读写布局*/
 function onListScroll(): void {
   if (scrollRaf !== 0) return
   scrollRaf = requestAnimationFrame(() => {
@@ -1358,11 +1681,11 @@ function onListScroll(): void {
   })
 }
 
-/* 周视图 ------------------------------------------------------------- */
+/* 周视------------------------------------------------------------- */
 
 let weekSignature = ''
 
-/** 周视图：最近 7 天的 24 桶迷你条；今天优先用实时数据。 */
+/** 周视图：最7 天的 24 桶迷你条；今天优先用实时数据*/
 function renderWeek(): void {
   if (state.weekDates.length === 0) {
     ui.week.replaceChildren()
@@ -1428,7 +1751,7 @@ async function loadStripWeek(): Promise<void> {
   renderWeek()
 }
 
-/** 换到某一天：退出检索、回到列表顶部、重置视窗。 */
+/** 换到某一天：退出检索、回到列表顶部、重置视窗*/
 async function selectDay(date: string): Promise<void> {
   ui.search.value = ''
   state.results = null
@@ -1472,7 +1795,7 @@ function onNoteInput(): void {
   }, 600)
 }
 
-/** 停止输入 600ms 后自动保存；失败时保留编辑内容并报错。 */
+/** 停止输入 600ms 后自动保存；失败时保留编辑内容并报错*/
 async function saveNote(): Promise<void> {
   const date = state.date
   const text = state.note
@@ -1532,8 +1855,8 @@ function renderHighlights(): void {
     )
     cards.push(card)
   }
-  // hidden 与子节点永远一致：要么三张卡片可见，要么整块隐藏且没有子节点
-  if (cards.length === 0) {
+  // hidden 与子节点永远一致：要么三张卡片可见，要么整块隐藏且没有子节
+if (cards.length === 0) {
     ui.highlights.replaceChildren()
     ui.highlights.hidden = true
     return
@@ -1629,7 +1952,7 @@ function removeProject(name: string): void {
   void applySettings({ projects: state.settings.projects.filter((rule) => rule.name !== name) })
 }
 
-/* 一周电影 ----------------------------------------------------------- */
+/* 一周电----------------------------------------------------------- */
 
 function shiftDate(dateISO: string, days: number): string {
   const date = new Date(startOfDay(dateISO))
@@ -1637,7 +1960,7 @@ function shiftDate(dateISO: string, days: number): string {
   return isoDate(date.getTime())
 }
 
-/** 周模式取一天的数据：今天用实时状态，其余读缓存。 */
+/** 周模式取一天的数据：今天用实时状态，其余读缓存*/
 function cachedDay(date: string): DayRollup | null {
   const today = isoDate(Date.now())
   if (date > today) return null
@@ -1645,7 +1968,7 @@ function cachedDay(date: string): DayRollup | null {
   return state.weekCache.get(date) ?? null
 }
 
-/** 本周 + 上周各 7 天，只补还没缓存的日期。 */
+/** 本周 + 上周7 天，只补还没缓存的日期*/
 async function ensureWeekDays(): Promise<void> {
   const today = isoDate(Date.now())
   const dates = [...weekDates(state.weekMonday), ...weekDates(shiftDate(state.weekMonday, -7))]
@@ -1661,7 +1984,7 @@ async function ensureWeekDays(): Promise<void> {
   )
 }
 
-/** 用缓存重建周模型并重绘（不发请求，tick 与设置变化都走这里）。 */
+/** 用缓存重建周模型并重绘（不发请求，tick 与设置变化都走这里）*/
 function refreshWeekFilm(): void {
   if (state.weekMonday === '') return
   const thisDates = weekDates(state.weekMonday)
@@ -1702,13 +2025,13 @@ function setMode(mode: 'day' | 'week'): void {
     void loadWeekFilm()
     return
   }
-  // 回到日模式：胶片刚重新可见，重新量一次尺寸再画
-  measure()
+  // 回到日模式：胶片刚重新可见，重新量一次尺寸再
+measure()
   renderRuler()
   updateMarkers()
 }
 
-/** 周模式下点任何镜头：切回日模式、载入该天、选中该镜头。 */
+/** 周模式下点任何镜头：切回日模式、载入该天、选中该镜头*/
 async function gotoDay(date: string, sceneId?: string): Promise<void> {
   if (state.mode !== 'day') setMode('day')
   if (state.date !== date) await loadDate(date)
@@ -1729,7 +2052,7 @@ function firstEntryOfLine(date: string, line: string): WeekEntry | null {
   return null
 }
 
-/** 幕卡片第一行的文字：未来 / 无采集 / 有记录无镜头 / 主线。 */
+/** 幕卡片第一行的文字：未/ 无采/ 有记录无镜头 / 主线*/
 function arcLabel(act: ActModel, column: StoryColumn): string {
   if (act.future) return '未到'
   if (column.noRecord) return '没有采样'
@@ -1746,8 +2069,8 @@ function renderArcs(film: WeekFilm): void {
     card.setAttribute('aria-label', `${act.date} ${act.weekday} ${arcLabel(act, column)}`)
     if (!act.hasData) card.classList.add('arc--empty')
     if (act.future) card.classList.add('arc--future')
-    // 固定两行：日期 + 主线 / 最长与剪辑（徽标跟在第二行末尾）
-    const head = node('div', 'arc__head')
+    // 固定两行：日+ 主线 / 最长与剪辑（徽标跟在第二行末尾
+const head = node('div', 'arc__head')
     head.append(
       node('span', 'arc__when', `${act.date.slice(5)} ${act.weekday}`),
       node('span', 'arc__line', arcLabel(act, column))
@@ -1768,7 +2091,7 @@ function renderArcs(film: WeekFilm): void {
   ui.weekArcs.replaceChildren(...cards)
 }
 
-/** 矩阵列头：日期 + 星期一行，切 / 回 / 无记录写在下面。 */
+/** 矩阵列头：日+ 星期一行，/ / 无记录写在下面*/
 function storyColumnNode(column: StoryColumn): HTMLElement {
   const head = node('div', 'story__col')
   if (column.noRecord) {
@@ -1816,8 +2139,8 @@ function renderStory(film: WeekFilm): void {
         button.disabled = true
         button.setAttribute('aria-label', `${row.line} ${cell.date} 未到`)
       } else if (cell.noRecord) {
-        // 整列没有采集：与日期下拉一致，点它去那天（不抢 Tab 焦点）
-        button.classList.add('story__cell--norecord')
+        // 整列没有采集：与日期下拉一致，点它去那天（不抢 Tab 焦点
+button.classList.add('story__cell--norecord')
         button.dataset.date = cell.date
         button.dataset.norecord = 'true'
         button.tabIndex = -1
@@ -1832,8 +2155,8 @@ function renderStory(film: WeekFilm): void {
           `${row.line} ${cell.date} ${fmtMinutes(cell.ms)}，点击查看当天该项目的第一个镜头`
         )
       } else {
-        // 当天有这个项目以外的事，但这个项目没有：不可点、不可聚焦
-        button.classList.add('story__cell--empty')
+        // 当天有这个项目以外的事，但这个项目没有：不可点、不可聚
+button.classList.add('story__cell--empty')
         button.disabled = true
         button.setAttribute('aria-label', `${row.line} ${cell.date} 没有记录`)
       }
@@ -1922,15 +2245,15 @@ function renderWeekFilm(): void {
   ui.weekNext.disabled = film.monday >= thisMonday
 }
 
-/** 项目等设置变化后，周视图也要跟着重算。 */
+/** 项目等设置变化后，周视图也要跟着重算*/
 function refreshWeekIfVisible(): void {
   if (state.weekFilm !== null) refreshWeekFilm()
 }
 
 function bindEvents(): void {
   ui.date.addEventListener('change', () => {
-    // 换日期就是看那一天，先退出检索
-    ui.search.value = ''
+    // 换日期就是看那一天，先退出检
+ui.search.value = ''
     state.results = null
     resetListScroll()
     void loadDate(ui.date.value)
@@ -1991,9 +2314,24 @@ function bindEvents(): void {
   ui.quitBtn.addEventListener('click', () => {
     void quitApp()
   })
+  ui.exitProjection.addEventListener('click', stopProjection)
+  ui.soundToggle.addEventListener('click', () => {
+    projection = setProjectionSound(projection, !projection.sound)
+    projectorAudio.setEnabled(projection.sound)
+    ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
+    ui.soundToggle.setAttribute('aria-pressed', String(projection.sound))
+  })
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !projection.active) return
+    event.preventDefault()
+    stopProjection()
+  })
   ui.zoomIn.addEventListener('click', () => zoomBy(1.6))
   ui.zoomOut.addEventListener('click', () => zoomBy(1 / 1.6))
   ui.zoomReset.addEventListener('click', () => applyView(fullDay(dayStart())))
+  ui.zoomFit.addEventListener('click', () =>
+    applyView(fitView(state.day.firstAt, state.day.lastAt, dayStart()))
+  )
   ui.exportPosterBtn.addEventListener('click', () => {
     void exportPoster()
   })
@@ -2080,8 +2418,8 @@ export async function boot(): Promise<void> {
   const source = createSource()
   const dates = await source.listDays()
   const today = isoDate(Date.now())
-  // 当天即使还没有日文件也默认今天并走空状态，不能退回昨天
-  const date = today
+  // 当天即使还没有日文件也默认今天并走空状态，不能退回昨
+const date = today
   const [day, live] = await Promise.all([source.getDay(date), source.live()])
 
   state = {
@@ -2127,6 +2465,14 @@ export async function boot(): Promise<void> {
   updateZoomLevel()
   bindEvents()
 
+  // 字体就绪前画的是无字版，就绪后重画一次（胶片与缩略图
+onStillFontsReady(() => {
+    reelKey = ''
+    listSignature = ''
+    windowSignature = ''
+    renderDay()
+  })
+
   void loadStripWeek()
   void loadNote(date)
   void loadSettings()
@@ -2136,3 +2482,4 @@ export async function boot(): Promise<void> {
   observer.observe(ui.listScroll)
   source.onTick(handleTick)
 }
+

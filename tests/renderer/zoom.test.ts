@@ -6,9 +6,11 @@ import {
   MIN_SPAN_MS,
   clampView,
   ensureVisible,
+  fitView,
   fractionInView,
   fullDay,
   layoutInView,
+  nowLabelSide,
   offsetInView,
   panBy,
   tickStepMs,
@@ -180,6 +182,61 @@ describe('布局映射', () => {
     expect(offsetInView(dayStart + 4 * HOUR, view, 800)).toBe(400)
     expect(offsetInView(dayStart + 6 * HOUR, view, 800)).toBe(800)
     expect(fractionInView(dayStart + 4 * HOUR, view)).toBe(0.5)
+  })
+})
+
+describe('现在标签贴边翻转', () => {
+  test('正常位置在右侧', () => {
+    expect(nowLabelSide(100, 40, 800)).toBe('right')
+  })
+
+  test('贴右边缘时翻到左侧', () => {
+    expect(nowLabelSide(760, 40, 800)).toBe('left')
+    expect(nowLabelSide(790, 40, 800)).toBe('left')
+  })
+
+  test('边界处仍然完整可见', () => {
+    const width = 800
+    const labelWidth = 40
+    const x = width - 2 - labelWidth
+    expect(nowLabelSide(x, labelWidth, width)).toBe('right')
+    expect(nowLabelSide(x + 1, labelWidth, width)).toBe('left')
+  })
+
+  test('非法输入不翻', () => {
+    expect(nowLabelSide(Number.NaN, 40, 800)).toBe('right')
+    expect(nowLabelSide(100, 40, 0)).toBe('right')
+  })
+})
+
+describe('适配素材', () => {
+  test('没有镜头时等同全天', () => {
+    expect(fitView(null, null, dayStart)).toEqual(fullDay(dayStart))
+  })
+
+  test('首尾各留 10 分钟', () => {
+    const first = dayStart + 9 * HOUR
+    const last = dayStart + 11 * HOUR
+    const view = fitView(first, last, dayStart)
+    expect(view.startMs).toBe(first - 10 * MINUTE)
+    expect(view.spanMs).toBe(2 * HOUR + 20 * MINUTE)
+  })
+
+  test('贴近零点时夹进当天', () => {
+    const view = fitView(dayStart + 5 * MINUTE, dayStart + HOUR, dayStart)
+    expect(view.startMs).toBe(dayStart)
+    expect(view.startMs + view.spanMs).toBeLessThanOrEqual(dayStart + DAY_MS)
+  })
+
+  test('单镜头至少到最小视窗', () => {
+    const at = dayStart + 12 * HOUR
+    expect(fitView(at, at, dayStart).spanMs).toBe(MIN_SPAN_MS)
+  })
+
+  test('首尾颠倒也能用', () => {
+    const first = dayStart + 9 * HOUR
+    const last = dayStart + 10 * HOUR
+    expect(fitView(last, first, dayStart)).toEqual(fitView(first, last, dayStart))
   })
 })
 

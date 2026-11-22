@@ -398,13 +398,18 @@ function installNetworkGuard(): void {
 }
 
 function setupTray(): void {
+  const paths = {
+    isPackaged: app.isPackaged,
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath
+  }
   try {
     tray = createTray({
-      iconPath: resolveResource('tray.png', {
-        isPackaged: app.isPackaged,
-        appPath: app.getAppPath(),
-        resourcesPath: process.resourcesPath
-      }),
+      icons: {
+        active: resolveResource('tray.png', paths),
+        paused: resolveResource('tray-paused.png', paths),
+        error: resolveResource('tray-error.png', paths)
+      },
       state: trayStateOf(liveState()),
       actions: {
         open: () => showWindow(),

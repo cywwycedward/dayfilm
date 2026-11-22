@@ -103,3 +103,55 @@ out/renderer/assets/index-eaQ2rmTO.js  54.22 kB
 4. **`saveImage` 不校验 PNG 完整性**，只看 magic 与体积（契约只要求这两条）；写坏图的责任在界面侧渲染。
 5. **导出剧本时手记/项目是现读的**：导出瞬间的设置与手记，与界面当时展示的可能是不同快照（用户改了设置但还没刷新）。这是“以落盘为准”的取舍，没有额外做一致性快照。
 6. 界面侧 `src/renderer/src/data.ts` 还缺 `getNote`/`setNote`/`saveImage` 三个方法（全量 typecheck 会报），按分工由 df-ui 修。
+
+---
+
+## 追加：托盘图标三态切换（品牌资产接入）
+
+品牌资产 `resources/tray.png`、`tray-paused.png`、`tray-error.png`（同形不同色，32×32）到位后，主进程侧接上三态图标。
+
+### 改动
+
+- `src/main/tray/tooltip.ts`（纯函数，不引 Electron）：
+  - 新增 `TrayMood = 'active' | 'paused' | 'error'` 与 `TRAY_ICON_FILES`（三态 → 文件名）。
+  - `trayMood(state)` 是唯一的状态判定（出错 > 已暂停 > 采集中），`trayStatusLabel` 与图标都从它派生，不会出现“文字说出错、图标还在采集中”。
+  - `resolveTrayMood(state, available)` / `trayIconFile(state, available)`：对应状态的图标缺失时回落到 `tray.png`。
+- `src/main/tray/index.ts`：启动时把三张图标各解码一次（`nativeImage.createFromPath`），记下真正可用的一组；某个缺失则告警**一次**并回落，一个都读不到则抛错（沿用 `setupTray` 的兜底：`--hidden` 下强制显示窗口）。`render()` 拆成三个独立信号：提示文字、菜单（只看 `paused`）、图标（看 mood），各自只在变化时更新——每 2 秒一次 tick 不会重建菜单，也不会重复换图。
+- `src/main/index.ts`：`setupTray` 用 `resolveResource` 解析三个路径（开发取仓库 `resources/`，打包取 `process.resourcesPath`），一次算好传给 `createTray`。
+- `tests/main/tray.test.ts`：＋6 例，覆盖三态到文件名的映射、出错优先于暂停、逐个状态缺失时的回落、部分缺失只回落缺的那一种、图标状态与文字状态同一个判断。
+
+### 取舍
+
+- 告警只在启动解码时发一次：这正是“不要每 tick 刷日志”的实现方式（解码发生在 `createTray`，`render` 里只做查表与换图）。
+- `tray.png` 是基准图：它缺失时托盘直接不可用（抛错），而不去拿暂停/出错图标冒充；这比“随便挑一张”更容易在真机上发现问题。
+- 菜单只在 `paused` 变化时重建（之前是提示文字一变就重建，而提示里的“今日时长”几乎每 tick 都在变）——顺手修掉了这个每 2 秒重建一次的浪费。
+
+### 验证
+
+```text
+=== npx tsc --noEmit -p tsconfig.node.json ===
+（无输出，exit=0）
+
+=== npx vitest run tests/main ===
+ Test Files  17 passed (17)
+      Tests  170 passed (170)
+   Duration  2.15s
+
+=== npm run build ===
+out/main/index.js       54.47 kB  ✓ built in 195ms
+out/preload/index.js     1.52 kB  ✓ built in 11ms
+```
+
+品牌资产本身的解码在真实 Electron 运行时验过一次（临时探针放在 `%TEMP%`，已删）：
+
+```text
+tray.png        empty=false size=32x32
+tray-paused.png empty=false size=32x32
+tray-error.png  empty=false size=32x32
+```
+
+即三张图都能被 `nativeImage` 读出，回落路径在正常情况下不会被触发。
+
+### 仍需人眼确认
+
+图标切换的最后一步（Windows 托盘区里真的换了图）无法自动化：`setImage` 是否生效、三张图在深色任务栏上是否可分辨，需要有人看一下托盘区。切换逻辑（状态 → 文件名 → `setImage`）已由单测与代码路径固定；打包时记得 `tray-paused.png` / `tray-error.png` 也要进 `extraResources`（现在是三张都从 `resourcesPath` 取）。

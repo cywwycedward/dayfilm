@@ -150,3 +150,26 @@ export function ensureVisible(
   const span = Math.max(current.spanMs, Math.min(DAY_MS, duration))
   return clampView({ startMs: from - (span - duration) / 2, spanMs: span }, dayStart)
 }
+
+export const FIT_PADDING_MS = 10 * 60_000
+
+/** “现在”标签靠右边缘时翻到左侧，保证整字可见。 */
+export function nowLabelSide(nowX: number, labelWidth: number, width: number): 'left' | 'right' {
+  if (!(width > 0) || !Number.isFinite(nowX)) return 'right'
+  return nowX + Math.max(0, labelWidth) > width - 2 ? 'left' : 'right'
+}
+
+/** 适配素材：[首个镜头开始 - 10 分钟, 最后一个镜头结束 + 10 分钟]；没有镜头时等同全天。 */
+export function fitView(
+  firstAt: number | null,
+  lastAt: number | null,
+  dayStart: number,
+  paddingMs = FIT_PADDING_MS
+): TimeView {
+  if (firstAt === null || lastAt === null) return fullDay(dayStart)
+  if (!Number.isFinite(firstAt) || !Number.isFinite(lastAt)) return fullDay(dayStart)
+  const from = Math.min(firstAt, lastAt)
+  const to = Math.max(firstAt, lastAt)
+  const span = Math.min(DAY_MS, Math.max(MIN_SPAN_MS, to - from + paddingMs * 2))
+  return clampView({ startMs: from - paddingMs, spanMs: span }, dayStart)
+}

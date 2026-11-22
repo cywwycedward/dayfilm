@@ -72,6 +72,7 @@
             <button class="btn btn--icon" id="zoomOut" type="button" aria-label="缩小">−</button>
             <span class="zoom-level" id="zoomLevel">1x</span>
             <button class="btn btn--icon" id="zoomIn" type="button" aria-label="放大">+</button>
+            <button class="btn" id="zoomFit" type="button">适配素材</button>
             <button class="btn" id="zoomReset" type="button">回到全天</button>
           </div>
         </div>
@@ -99,6 +100,9 @@
 
         <div class="week" id="week" role="group" aria-label="最近 7 天"></div>
         <div class="ruler" id="ruler" aria-hidden="true"></div>
+        <div class="density" id="densityWrap" aria-hidden="true">
+          <canvas id="densityCanvas"></canvas>
+        </div>
         <div class="track" id="track" tabindex="0" role="group" aria-label="当日胶片，方向键选择镜头">
           <canvas id="reelCanvas"></canvas>
           <span class="track__now" id="nowMark" hidden><em>现在</em></span>
@@ -151,8 +155,8 @@
               placeholder="写一句今天的评语…"
             ></textarea>
             <div class="note__meta">
-              <span class="note__count" id="noteCount">0/200</span>
               <span class="note__status" id="noteStatus" role="status" data-kind="idle"></span>
+              <span class="note__count" id="noteCount">0/200</span>
             </div>
           </div>
         </div>
@@ -177,6 +181,31 @@
         </div>
         <p class="empty" id="empty" hidden>还没有拍摄任何素材</p>
       </section>
+
+      <div class="projection" id="projection" hidden>
+        <div class="projection__perf projection__perf--top" aria-hidden="true"></div>
+        <div class="projection__stage" id="projectionStage">
+          <canvas id="projectionFrame"></canvas>
+          <span class="projection__shot" id="shotCounter" hidden>SHOT 01 / 01</span>
+          <span class="projection__cut" id="projectionCuts" hidden></span>
+        </div>
+        <div class="projection__caption">
+          <span class="projection__index" id="projectionIndex">#01</span>
+          <span class="projection__title" id="projectionTitle">—</span>
+          <span class="projection__clock" id="projectionClock">00:00</span>
+        </div>
+        <div class="projection__bar">
+          <div class="projection__strip" id="projectionStrip">
+            <canvas id="projectionStripCanvas"></canvas>
+            <i class="projection__head" id="projectionHead"></i>
+          </div>
+          <div class="projection__controls">
+            <button class="btn" id="soundToggle" type="button" aria-pressed="false">声音：关</button>
+            <button class="btn" id="exitProjection" type="button">退出放映</button>
+          </div>
+        </div>
+        <div class="projection__perf projection__perf--bottom" aria-hidden="true"></div>
+      </div>
 
       <div class="drawer" id="drawer" hidden>
         <div class="drawer__scrim" id="drawerScrim"></div>

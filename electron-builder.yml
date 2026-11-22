@@ -19,6 +19,10 @@ extraResources:
     to: capture.ps1
   - from: resources/tray.png
     to: tray.png
+  - from: resources/tray-paused.png
+    to: tray-paused.png
+  - from: resources/tray-error.png
+    to: tray-error.png
 
 win:
   target:

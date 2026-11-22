@@ -64,6 +64,22 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 
 两个版本累计：`npm run typecheck` exit=0，`npm test` 338 例通过（29 个文件），`npm run build` 通过。
 
+## v1.3 视觉重做
+
+用户对 v1.2 的反馈是"品味太差、剧照像随机图片、播放看不出效果"。v1.3 不改信息结构，重做视觉语言，权威文档见[视觉语言](../product/visual-language.md)。
+
+| 项 | 改动 | 证据 |
+| --- | --- | --- |
+| 字体 | 自托管 Inter（400/700）、IBM Plex Mono（400/500）、Bebas Neue（OFL，共约 160 KB），中文回落 YaHei | 构建产物 `assets/inter-400-*.woff2` 等随包；界面与 canvas 同步生效（绘制前等 `document.fonts.ready`） |
+| 剧照 | 从"哈希渐变"改为场记板：应用名（Bebas）、标题、时间码、镜次、族色边条、上下齿孔；三档形态自适应（完整/紧凑/细缝） | `scripts/probe-visual.mjs` 四张截图；`tests/renderer/still-frame.test.ts` 覆盖档位与字号 |
+| 放映 | 播放进入放映态：16:9 大画面、场景 120ms 交叉淡入、背景大镜次数字、时长尺、上下滚动齿孔、SHOT 计数与剪辑速率；可选 WebAudio 放映机声 | `%TEMP%\dfv3\3-projection.png`；`tests/renderer/projection-frame.test.ts` 8 例 |
+| 播放区间 | 从当天第一个有素材的镜头开始、播到最后一个结束；选中镜头则从选中开始；无素材不进入放映 | 纯函数测试 + 真机点播 |
+| 版式 | 去卡片边框、改用发丝线与间距阶梯；新增 48px 素材密度直方图与"适配素材"按钮 | 日视图截图中 00:00–21:50 的空白由直方图承担信息 |
+| 海报 | 左右两栏：左栏日期/题材/三项数字/当日之最/字标；右栏素材区间胶片带 + 2×2 接触印相（复用放映画面版式） | 通过真实保存对话框导出的 `dayfilm-2026-11-22.png`（178 KB，1600×1000） |
+| 图标 | 应用图标与托盘三态（采集中/已暂停/出错）重画，脚本可复现 | `build/icon.png`、`build/icon.ico`、`resources/tray*.png`；打包后 `resources/` 内确认 |
+
+累计：`npm run typecheck` exit=0，`npm test` 31 文件 / 367 例通过，`npm run build` 通过。
+
 ## 复现命令
 
 ```powershell
