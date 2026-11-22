@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="color-scheme" content="dark" />
+    <title>Dayfilm</title>
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">
+          <h1 class="brand__mark">DAYFILM</h1>
+          <span class="brand__sub">一天的胶片</span>
+        </div>
+        <div class="controls">
+          <label class="field">
+            <span class="field__label">日期</span>
+            <select id="date"></select>
+          </label>
+          <label class="field field--search">
+            <span class="field__label">检索</span>
+            <input
+              id="search"
+              type="search"
+              placeholder="标题或进程名"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+        </div>
+        <div class="topbar__end">
+          <button class="btn" id="exportPoster" type="button">导出海报</button>
+          <button class="btn" id="export" type="button">导出剧本</button>
+          <button class="btn" id="settings" type="button" aria-haspopup="dialog" aria-expanded="false">
+            设置
+          </button>
+          <span class="chip" id="chip" data-state="ok"
+            ><i class="chip__dot"></i><span id="chipText">采集正常</span></span
+          >
+        </div>
+      </header>
+
+      <div class="banner" id="banner" role="alert" hidden>
+        <strong class="banner__label">采集中断</strong>
+        <span id="bannerText"></span>
+      </div>
+      <div class="banner banner--storage" id="storageBanner" role="alert" hidden>
+        <strong class="banner__label">写入异常</strong>
+        <span id="storageText"></span>
+      </div>
+      <p class="notice" id="notice" role="status" data-open="false"></p>
+
+      <section class="live">
+        <span class="live__dot" id="liveDot" data-state="idle"></span>
+        <span class="live__text" id="liveText" data-live>空闲中</span>
+        <span class="live__elapsed" id="elapsed">00:00:00</span>
+      </section>
+
+      <section class="reel">
+        <div class="reel__head">
+          <h2 class="reel__title" id="reelTitle">今日胶片</h2>
+          <span class="reel__hint">← → 选镜头 · 滚轮缩放 · 拖动平移 · 点周格切日</span>
+          <div class="mode" role="group" aria-label="视图模式">
+            <button class="mode__btn is-active" id="modeDay" type="button" aria-pressed="true">日</button>
+            <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
+          </div>
+          <div class="reel__tools" role="group" aria-label="胶片缩放">
+            <button class="btn btn--icon" id="zoomOut" type="button" aria-label="缩小">−</button>
+            <span class="zoom-level" id="zoomLevel">1x</span>
+            <button class="btn btn--icon" id="zoomIn" type="button" aria-label="放大">+</button>
+            <button class="btn" id="zoomReset" type="button">回到全天</button>
+          </div>
+        </div>
+
+        <div class="week-film" id="weekFilm" hidden>
+          <div class="week-film__bar">
+            <button class="btn btn--icon" id="weekPrev" type="button" aria-label="上一周">‹</button>
+            <span class="week-film__range" id="weekRange">—</span>
+            <button class="btn btn--icon" id="weekNext" type="button" aria-label="下一周">›</button>
+            <button class="btn" id="weekToday" type="button">本周</button>
+          </div>
+          <div class="week-film__scroll">
+            <section class="arcs" id="weekArcs" aria-label="七日叙事弧"></section>
+            <section class="story" id="storyline" aria-label="故事线"></section>
+            <section class="week-verdict" aria-label="周导演评语">
+              <p class="week-verdict__sentence" id="weekVerdict">—</p>
+              <details class="week-evidence" id="weekEvidence">
+                <summary>证据</summary>
+                <div class="week-evidence__body" id="weekEvidenceBody"></div>
+              </details>
+            </section>
+            <section class="week-picks" id="weekPicks" aria-label="本周精选"></section>
+          </div>
+        </div>
+
+        <div class="week" id="week" role="group" aria-label="最近 7 天"></div>
+        <div class="ruler" id="ruler" aria-hidden="true"></div>
+        <div class="track" id="track" tabindex="0" role="group" aria-label="当日胶片，方向键选择镜头">
+          <canvas id="reelCanvas"></canvas>
+          <span class="track__now" id="nowMark" hidden><em>现在</em></span>
+          <span class="track__playhead" id="playhead" hidden></span>
+          <div class="tip" id="tip" hidden></div>
+        </div>
+      </section>
+
+      <section class="transport">
+        <figure class="frame" id="frameBox" data-kind="empty">
+          <img id="frame" alt="" />
+          <figcaption class="frame__tag" id="frameTag" hidden>中场休息</figcaption>
+        </figure>
+        <div class="nowPlaying">
+          <p class="nowPlaying__title" id="frameTitle">—</p>
+          <p class="nowPlaying__sub" id="frameSub">—</p>
+        </div>
+        <div class="transport__controls">
+          <button class="btn btn--play" id="play" type="button">播放</button>
+          <div class="speeds" role="group" aria-label="回放倍速">
+            <button class="speed" type="button" data-speed="60" aria-pressed="false">60x</button>
+            <button class="speed" type="button" data-speed="600" aria-pressed="false">600x</button>
+            <button class="speed" type="button" data-speed="3600" aria-pressed="false">3600x</button>
+          </div>
+          <input
+            class="scrub"
+            id="scrub"
+            type="range"
+            min="0"
+            max="1439"
+            step="1"
+            value="0"
+            aria-label="回放进度"
+          />
+          <span class="timecode" id="timecode">00:00 / 24:00</span>
+        </div>
+      </section>
+
+      <section class="summary">
+        <div class="genre">
+          <p class="genre__value" id="genre">—</p>
+          <p class="genre__note" id="verdict">—</p>
+          <p class="genre__meta" id="genreMeta">题材</p>
+          <div class="note">
+            <textarea
+              class="note__input"
+              id="note"
+              rows="2"
+              maxlength="200"
+              placeholder="写一句今天的评语…"
+            ></textarea>
+            <div class="note__meta">
+              <span class="note__count" id="noteCount">0/200</span>
+              <span class="note__status" id="noteStatus" role="status" data-kind="idle"></span>
+            </div>
+          </div>
+        </div>
+        <div class="summary__data">
+          <dl class="metrics" id="metrics"></dl>
+          <div class="ranking" id="ranking"></div>
+          <div class="project-totals" id="projectTotals"></div>
+        </div>
+      </section>
+
+      <section class="highlights" id="highlights" aria-label="今日高光"></section>
+
+      <section class="shots">
+        <div class="shots__head">
+          <h2 id="listTitle">镜头列表</h2>
+          <span class="shots__count" id="listCount"></span>
+        </div>
+        <div class="shots__scroll" id="listScroll">
+          <div class="shots__spacer" id="listSpacer">
+            <ol class="shots__list" id="list"></ol>
+          </div>
+        </div>
+        <p class="empty" id="empty" hidden>还没有拍摄任何素材</p>
+      </section>
+
+      <div class="drawer" id="drawer" hidden>
+        <div class="drawer__scrim" id="drawerScrim"></div>
+        <aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
+          <header class="panel__head">
+            <h2 id="panelTitle">设置</h2>
+            <button class="btn btn--quiet" id="panelClose" type="button">关闭</button>
+          </header>
+          <div class="panel__body">
+            <section class="fieldset">
+              <h3>保留期</h3>
+              <select id="settingRetention"></select>
+              <p class="hint">启动时清理超出保留期的日文件，界面的日期列表只列出保留期内的日期。</p>
+            </section>
+
+            <section class="fieldset">
+              <h3>脱敏关键词</h3>
+              <div class="terms" id="termChips"></div>
+              <form class="term-form" id="termForm">
+                <input id="termInput" type="text" placeholder="输入关键词后回车" autocomplete="off" />
+                <button class="btn" type="submit">添加</button>
+              </form>
+              <p class="hint">命中后标题显示为 [已隐藏]，只影响之后的新记录。</p>
+              <p class="hint hint--mono">内置规则（不可编辑）：<span id="builtinTerms"></span></p>
+            </section>
+
+            <section class="fieldset">
+              <h3>项目</h3>
+              <div class="projects" id="projectCards"></div>
+              <form class="project-form" id="projectForm">
+                <input id="projectName" type="text" placeholder="项目名" autocomplete="off" />
+                <input id="projectTerms" type="text" placeholder="关键词，用逗号分隔" autocomplete="off" />
+                <button class="btn" type="submit">添加</button>
+              </form>
+              <p class="hint">镜头标题或进程名包含任一关键词就归入该项目，按规则顺序取第一条命中。</p>
+            </section>
+
+            <section class="fieldset">
+              <h3>常驻</h3>
+              <label class="switch"><input type="checkbox" id="settingAutoStart" /><span>开机自启</span></label>
+              <label class="switch"><input type="checkbox" id="settingPaused" /><span>暂停采样</span></label>
+              <p class="hint">暂停与托盘菜单里的“暂停采样”是同一个开关。</p>
+            </section>
+
+            <section class="fieldset">
+              <h3>数据位置</h3>
+              <code class="path">%APPDATA%\dayfilm\days\</code>
+              <p class="hint">关闭窗口会收到托盘继续采样；要彻底停止请用下面的按钮。</p>
+              <button class="btn btn--danger" id="quitBtn" type="button">退出 Dayfilm</button>
+            </section>
+
+            <p class="panel__status" id="panelStatus" role="status" data-kind="idle"></p>
+          </div>
+        </aside>
+      </div>
+
+      <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
+    </div>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

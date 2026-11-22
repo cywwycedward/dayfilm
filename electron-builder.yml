@@ -1,0 +1,31 @@
+appId: com.dayfilm.app
+productName: Dayfilm
+copyright: Copyright © 2025 Dayfilm
+
+directories:
+  buildResources: build
+  output: dist
+
+# 入包内容只有 electron-vite 产物与 package.json；源码、测试、文档、脚本、sourcemap 一律不进 asar。
+files:
+  - out/**
+  - package.json
+  - '!**/*.map'
+  - '!**/{src,tests,docs,scripts}/**'
+
+# 主进程按 process.resourcesPath/capture.ps1 与 process.resourcesPath/tray.png 取文件。
+extraResources:
+  - from: resources/capture.ps1
+    to: capture.ps1
+  - from: resources/tray.png
+    to: tray.png
+
+win:
+  target:
+    - target: portable
+      arch:
+        - x64
+  icon: build/icon.ico
+  # 本机无代码签名证书：产物未签名，首次运行会出现 SmartScreen 提示。
+
+artifactName: Dayfilm-${version}-portable.${ext}
