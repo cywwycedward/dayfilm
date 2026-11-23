@@ -4,7 +4,7 @@
  */
 import type { DayfilmApi } from '../../shared/ipc'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
-import type { DayRollup, LiveState, Scene } from '../../shared/types'
+import type { DayRollup, LiveState, Scene, SceneMark } from '../../shared/types'
 import { buildMockDay, buildMockLive, mockDates } from './mock'
 import { fmtClock, fmtDuration, isoDate, startOfDay } from './lib/time'
 import { formatEdl } from './lib/edl'
@@ -28,6 +28,8 @@ export interface DayfilmSource {
   saveImage(defaultName: string, pngBase64: string): Promise<string>
   /** 导出 CMX3600 EDL；返回落盘路径或说明，空串表示取消。 */
   exportEdl(date: string): Promise<string>
+  /** 标记花絮 / 正片；传 null 清除。返回更新后的当天汇总。 */
+  setMark(date: string, startMs: number, mark: SceneMark | null): Promise<DayRollup>
   /** 导出剧本 PDF；返回落盘路径，空串表示取消。 */
   exportPdf(date: string): Promise<{ path: string }>
   /** 显隐导演 HUD；返回切换后的状态。 */
@@ -62,6 +64,7 @@ function liveSource(api: DayfilmApi): DayfilmSource {
     saveImage: async (defaultName, pngBase64) =>
       (await (exposed.saveImage?.(defaultName, pngBase64) ?? missing('saveImage'))).path,
     exportEdl: async (date) => (await (exposed.exportEdl?.(date) ?? missing('exportEdl'))).path,
+    setMark: (date, startMs, mark) => exposed.setMark?.(date, startMs, mark) ?? missing('setMark'),
     exportPdf: (date) => exposed.exportPdf?.(date) ?? missing('exportPdf'),
     setHud: async (visible) => (await (exposed.setHud?.(visible) ?? missing('setHud'))).visible,
     quit: () => exposed.quit?.() ?? missing('quit'),
@@ -98,6 +101,8 @@ function mockSource(): DayfilmSource {
     ? '写入 days\\2026-11-22.jsonl 失败（磁盘空间不足），采样已转入内存缓冲并重试'
     : null
   const dense = modes.has('burst')
+  // ?mock=fresh 模拟首次运行：当天还没有任何镜头（引导卡片自查用）
+  const fresh = modes.has('fresh')
   const readonly = modes.has('readonly')
   // ?mock=sparse 让较早的几天没有采样，用来验收“点没有数据的天”
   const sparse = modes.has('sparse')
@@ -113,22 +118,55 @@ function mockSource(): DayfilmSource {
     ]
   }
   const notes = new Map<string, string>()
+  // 导演剪辑标记：`${date}|${start}` → feature / extra
+  const marks = new Map<string, SceneMark>()
+
+  const applyMarks = (date: string, base: DayRollup): DayRollup => {
+    if (marks.size === 0) return base
+    let touched = false
+    const scenes = base.scenes.map((scene) => {
+      const mark = marks.get(`${date}|${scene.start}`)
+      if (mark === undefined || scene.mark === mark) return scene
+      touched = true
+      return { ...scene, mark }
+    })
+    if (!touched) return base
+    const featureMs = scenes
+      .filter((scene) => scene.mark !== 'extra')
+      .reduce((sum, scene) => sum + scene.seconds * 1000, 0)
+    const extraMs = scenes
+      .filter((scene) => scene.mark === 'extra')
+      .reduce((sum, scene) => sum + scene.seconds * 1000, 0)
+    return { ...base, scenes, featureMs, extraMs }
+  }
 
   const today = (): string => isoDate(Date.now())
   // ?mock=sparse 让本周周一到周三没有采样，用来验收“无记录”整列
   const sparseDates = sparse ? new Set(weekDates(mondayOf(today())).slice(0, 3)) : new Set<string>()
   const dayFor = (date: string): DayRollup => {
-    if (sparseDates.has(date)) return buildMockDay(date, startOfDay(date))
+    if (fresh) return applyMarks(date, buildMockDay(date, startOfDay(date)))
+    if (sparseDates.has(date)) return applyMarks(date, buildMockDay(date, startOfDay(date)))
     const end = date === today() ? Date.now() : startOfDay(date) + 22 * 3_600_000
-    return buildMockDay(date, end, { dense })
+    return applyMarks(date, buildMockDay(date, end, { dense }))
   }
-  const liveNow = (): LiveState =>
-    buildMockLive(today(), Date.now(), {
+  const liveNow = (): LiveState => {
+    if (fresh) {
+      const live = buildMockLive(today(), startOfDay(today()), {
+        captureError,
+        storageError,
+        paused: settings.paused,
+        dense
+      })
+      return { ...live, day: applyMarks(live.day.date, live.day) }
+    }
+    const live = buildMockLive(today(), Date.now(), {
       captureError,
       storageError,
       paused: settings.paused,
       dense
     })
+    return { ...live, day: applyMarks(live.day.date, live.day) }
+  }
   const clone = (value: Settings): Settings => ({
     ...value,
     redactTerms: [...value.redactTerms],
@@ -216,6 +254,12 @@ function mockSource(): DayfilmSource {
       if (readonly) throw new Error('演示环境：设置只读，写入被拒绝')
       settings = clone({ ...settings, hud: { ...settings.hud, visible } })
       return visible
+    },
+    setMark: async (date, startMs, mark) => {
+      const key = `${date}|${startMs}`
+      if (mark === null) marks.delete(key)
+      else marks.set(key, mark)
+      return dayFor(date)
     },
     onTick: (cb) => {
       const timer = window.setInterval(() => cb(liveNow()), 2000)

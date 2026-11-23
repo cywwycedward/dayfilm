@@ -41,7 +41,7 @@ function day(scenes: Scene[]): DayRollup {
     cuts: 3,
     longestShot: null,
     topApps: [],
-    verdict: { label: '跳切风暴', note: '', cutRate: 64.5 }
+    verdict: { label: '跳切风暴', note: '', cutRate: 64.5 },    featureMs: 0,    extraMs: 0
   }
 }
 

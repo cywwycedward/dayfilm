@@ -19,6 +19,7 @@ export const GUARDED_CHANNELS = {
   saveImage: IPC.saveImage,
   exportEdl: IPC.exportEdl,
   exportPdf: IPC.exportPdf,
+  setMark: IPC.setMark,
   setHud: IPC.setHud,
   quit: IPC.quit
 } as const
@@ -89,6 +90,7 @@ export interface IpcDeps {
   saveImage(defaultName: unknown, pngBase64: unknown): Promise<{ path: string }> | { path: string }
   exportEdl(date: unknown): Promise<{ path: string }> | { path: string }
   exportPdf(date: unknown): Promise<{ path: string }> | { path: string }
+  setMark(date: unknown, startMs: unknown, mark: unknown): DayRollup
   setHud(visible: unknown): { visible: boolean }
   quit(): void
 }
@@ -108,6 +110,7 @@ export function createHandlers(deps: IpcDeps): Record<GuardedChannel, GuardedHan
     [IPC.saveImage]: (defaultName, pngBase64) => deps.saveImage(defaultName, pngBase64),
     [IPC.exportEdl]: (date) => deps.exportEdl(date),
     [IPC.exportPdf]: (date) => deps.exportPdf(date),
+    [IPC.setMark]: (date, startMs, mark) => deps.setMark(date, startMs, mark),
     [IPC.setHud]: (visible) => deps.setHud(visible),
     [IPC.quit]: () => deps.quit()
   }

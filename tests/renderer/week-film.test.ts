@@ -28,6 +28,8 @@ function rollup(date: string, scenes: Scene[], cuts = 0): DayRollup {
     firstAt: scenes[0]?.start ?? null,
     lastAt: scenes[scenes.length - 1]?.end ?? null,
     activeMs: shots.reduce((sum, item) => sum + (item.end - item.start), 0),
+    featureMs: shots.reduce((sum, item) => sum + (item.end - item.start), 0),
+    extraMs: 0,
     idleMs: 0,
     scenes,
     cuts,

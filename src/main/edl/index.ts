@@ -66,12 +66,16 @@ export async function writeEdlFile(target: string, day: DayRollup): Promise<void
 }
 
 /**
- * 一天的 CMX3600 EDL（规格 R42）。只导出非空闲镜头，记录轨按真实间隔连续排布，
- * 源时间码用镜头当天的本地墙上时间；标题为空时写"未命名窗口"。
+ * 一天的 CMX3600 EDL（规格 R42 / v2.4）。只导出非空闲且未被标成花絮的镜头，
+ * 记录轨按真实间隔连续排布，源时间码用镜头当天的本地墙上时间；标题为空时写"未命名窗口"。
+ * 当天有花絮时在头部加一行注释说明漏了多少个。
  */
 export function renderEdl(day: DayRollup): string {
-  const shots = day.scenes.filter((scene) => scene.kind === 'shot')
-  const lines = [`TITLE: Dayfilm ${day.date}`, 'FCM: NON-DROP FRAME', '']
+  const shots = day.scenes.filter((scene) => scene.kind === 'shot' && scene.mark !== 'extra')
+  const omitted = day.scenes.filter((scene) => scene.kind === 'shot' && scene.mark === 'extra').length
+  const lines = [`TITLE: Dayfilm ${day.date}`, 'FCM: NON-DROP FRAME']
+  if (omitted > 0) lines.push(`* NOTE: ${omitted} extra scenes omitted`)
+  lines.push('')
   if (shots.length > 0) {
     const firstStart = shots[0].start
     shots.forEach((scene, index) => {

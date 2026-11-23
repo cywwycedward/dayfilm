@@ -213,6 +213,25 @@ export function paintSpine(
       }
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
+
+      // 花絮帧：降饱和 40% + 45° 斜纹
+      if (frame.scene.mark === 'extra') {
+        ctx.fillStyle = 'rgba(10, 11, 13, 0.42)'
+        ctx.fillRect(0, y + 1, filmW, frameH - 2)
+        ctx.save()
+        ctx.beginPath()
+        ctx.rect(0, y + 1, filmW, frameH - 2)
+        ctx.clip()
+        ctx.strokeStyle = 'rgba(154, 160, 166, 0.22)'
+        ctx.lineWidth = 1
+        for (let offset = -frameH; offset < filmW + frameH; offset += 6) {
+          ctx.beginPath()
+          ctx.moveTo(offset, y + frameH)
+          ctx.lineTo(offset + frameH, y)
+          ctx.stroke()
+        }
+        ctx.restore()
+      }
     } else {
       // 空档：45° 细斜纹，与放映空档态同一套语言
       ctx.save()

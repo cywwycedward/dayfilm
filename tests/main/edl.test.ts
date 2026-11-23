@@ -9,7 +9,7 @@ const DATE = '2026-11-22'
 /** 本地时间 20:21:30.000 */
 const START = new Date(2026, 10, 22, 20, 21, 30, 0).getTime()
 
-function scene(startMs: number, endMs: number, exe = 'WindowsTerminal', title = 'LZD-20250906UAB: not-my-app'): Scene {
+function scene(startMs: number, endMs: number, exe = 'WindowsTerminal', title = 'LZD-20250906UAB: not-my-app', mark?: 'feature' | 'extra'): Scene {
   return {
     id: `${DATE}-x`,
     start: START + startMs,
@@ -17,7 +17,8 @@ function scene(startMs: number, endMs: number, exe = 'WindowsTerminal', title = 
     exe,
     title,
     seconds: Math.round((endMs - startMs) / 1000),
-    kind: 'shot'
+    kind: 'shot',
+    ...(mark ? { mark } : {})
   }
 }
 
@@ -32,7 +33,9 @@ function day(scenes: Scene[]): DayRollup {
     cuts: 0,
     longestShot: null,
     topApps: [],
-    verdict: { label: '长镜头', note: '', cutRate: 0 }
+    verdict: { label: '长镜头', note: '', cutRate: 0 },
+    featureMs: 0,
+    extraMs: 0
   }
 }
 
@@ -176,5 +179,38 @@ describe('writeEdlFile', () => {
   it('目标是一个不存在的盘符时也报可读错误', async () => {
     const target = join(tempRoot(), '不存在的子目录', 'dayfilm.edl')
     await expect(writeEdlFile(target, day([scene(0, 10_000)]))).rejects.toThrow(/EDL 保存失败：/)
+  })
+})
+
+describe('renderEdl 花絮（v2.4）', () => {
+  it('只导出非花絮镜头，头部加注释行', () => {
+    const text = renderEdl(
+      day([
+        scene(0, 60_000, 'Code', 'dayfilm', 'feature'),
+        scene(60_000, 120_000, 'Slack', '#general', 'extra'),
+        scene(120_000, 180_000, 'Chrome', 'GitHub')
+      ])
+    )
+    const events = text.split('\n').filter((line) => /^\d{3}  /.test(line))
+    expect(events).toHaveLength(2)
+    expect(text).toContain('* NOTE: 1 extra scenes omitted')
+    expect(text).not.toContain('Slack')
+    // 注释在头部、能会被剪辑软件忽略的位置（事件之前）
+    expect(text.indexOf('* NOTE:')).toBeLessThan(text.indexOf('001  AX'))
+  })
+
+  it('跳过花絮后记录轨仍按真实间隔排布', () => {
+    const text = renderEdl(
+      day([scene(0, 60_000), scene(60_000, 120_000, 'Slack', '#general', 'extra'), scene(120_000, 180_000, 'Chrome')])
+    )
+    const events = text.split('\n').filter((line) => /^\d{3}  /.test(line))
+    // 第三个镜头的记录入点 = 01:00:00:00 + 120s
+    expect(events[1]).toContain('01:02:00:00 01:03:00:00')
+    expect(events[1].startsWith('002  ')).toBe(true)
+  })
+
+  it('没有花絮时不出注释行', () => {
+    expect(renderEdl(day([scene(0, 60_000)]))).not.toContain('NOTE')
+    expect(renderEdl(day([]))).not.toContain('NOTE')
   })
 })

@@ -1,4 +1,4 @@
-import type { DayRollup, Sample, Scene, SceneKind, TopApp } from '../../shared/types'
+import type { DayRollup, Sample, Scene, SceneKind, SceneMark, TopApp } from '../../shared/types'
 import { totalByProject } from '../../shared/projects'
 import type { ProjectRule } from '../../shared/settings'
 import {
@@ -74,8 +74,32 @@ function sceneEnd(run: Run, next: Run | undefined, now: number): number {
   return Math.max(run.firstT, Math.min(run.lastT + SAMPLE_MS, limit))
 }
 
-/** 采样 → 一天的镜头、汇总与题材。纯函数，同输入同输出。 */
-export function buildDayRollup(samples: Sample[], date: string, now: number): DayRollup {
+/** 把标记应用到镜头上并重算正片/花絮时长（未标记按正片算）。 */
+export function applyMarks(rollup: DayRollup, marks: Record<string, SceneMark> | undefined): DayRollup {
+  if (!marks || Object.keys(marks).length === 0) return rollup
+  let featureMs = 0
+  let extraMs = 0
+  const scenes = rollup.scenes.map((scene) => {
+    if (scene.kind === 'intermission') return scene
+    const mark = marks[String(scene.start)]
+    const ms = scene.end - scene.start
+    if (mark === 'extra') {
+      extraMs += ms
+      return { ...scene, mark }
+    }
+    featureMs += ms
+    return mark === 'feature' ? { ...scene, mark } : scene
+  })
+  return { ...rollup, scenes, featureMs, extraMs }
+}
+
+/** 采样 → 一天的镜头、汇总与题材。纯函数，同输入同输出；`marks` 为镜头开始时刻 → 标记。 */
+export function buildDayRollup(
+  samples: Sample[],
+  date: string,
+  now: number,
+  marks?: Record<string, SceneMark>
+): DayRollup {
   const ordered = orderSamples(samples)
   const runs = groupRuns(ordered)
   const kept: Array<{ scene: Scene; ms: number }> = []
@@ -127,7 +151,7 @@ export function buildDayRollup(samples: Sample[], date: string, now: number): Da
 
   const cutRate = cuts / Math.max(activeMs / HOUR_MS, MIN_ACTIVE_MS)
 
-  return {
+  const base: DayRollup = {
     date,
     firstAt: ordered.length > 0 ? ordered[0].t : null,
     lastAt: ordered.length > 0 ? ordered[ordered.length - 1].t : null,
@@ -137,8 +161,12 @@ export function buildDayRollup(samples: Sample[], date: string, now: number): Da
     cuts,
     longestShot: longest ? longest.scene : null,
     topApps,
-    verdict: judge(cutRate, longest)
+    verdict: judge(cutRate, longest),
+    // 未标记时全部算正片；标记由 applyMarks 覆盖
+    featureMs: activeMs,
+    extraMs: 0
   }
+  return applyMarks(base, marks)
 }
 
 /** 标题与进程名的子串匹配，不区分大小写；跨日期合并后按开始时间倒序，最多 200 条。 */
@@ -179,6 +207,7 @@ export function renderScreenplay(day: DayRollup, options: ScreenplayOptions = {}
   lines.push(
     `题材：${day.verdict.label}。${day.verdict.note}活跃 ${formatDurationSpan(day.activeMs)}，中场休息 ${formatDurationSpan(day.idleMs)}，${shotCount} 个镜头，${day.cuts} 次剪辑。`
   )
+  lines.push(`正片 ${formatDurationSpan(day.featureMs)} · 花絮 ${formatDurationSpan(day.extraMs)}`)
 
   const projects = options.projects && options.projects.length > 0 ? totalByProject(day.scenes, options.projects) : []
   if (projects.length > 0) {

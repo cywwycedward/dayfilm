@@ -54,7 +54,7 @@ function day(scenes: Scene[], apps: TopApp[] = topApps): DayRollup {
       null
     ),
     topApps: apps,
-    verdict: { label: '标准剪辑', note: '平均每小时 3.6 次切换。', cutRate: 3.6 }
+    verdict: { label: '标准剪辑', note: '平均每小时 3.6 次切换。', cutRate: 3.6 },    featureMs: 0,    extraMs: 0
   }
 }
 

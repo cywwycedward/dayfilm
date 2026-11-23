@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'vitest'
 import {
   CALENDAR_DAYS,
+  GENRE_PALETTE,
+  NO_RECORD_PALETTE,
   calendarCells,
   calendarDates,
+  cellPalette,
   type CalendarDay
 } from '../../src/renderer/src/lib/calendar'
 import { isoDate, startOfDay } from '../../src/renderer/src/lib/time'
@@ -73,6 +76,36 @@ describe('片场日历跨月与缺日', () => {
     expect(cells).toHaveLength(CALENDAR_DAYS)
     expect(cells.every((cell) => cell.level === 0 && cell.activeMs === 0)).toBe(true)
     expect(cells.some((cell) => cell.future)).toBe(true)
+  })
+})
+
+describe('片场日历题材色相（A 块）', () => {
+  test('无记录与四种题材的 H/S/B', () => {
+    expect(cellPalette('', 0)).toEqual(NO_RECORD_PALETTE)
+    expect(NO_RECORD_PALETTE).toEqual({ hue: 0, sat: 0, lum: 8 })
+    expect(GENRE_PALETTE['长镜头']).toEqual({ hue: 200, sat: 35, lum: 55 })
+    expect(GENRE_PALETTE['标准剪辑']).toEqual({ hue: 45, sat: 8, lum: 58 })
+    expect(GENRE_PALETTE['快切']).toEqual({ hue: 48, sat: 38, lum: 68 })
+    expect(GENRE_PALETTE['跳切风暴']).toEqual({ hue: 30, sat: 62, lum: 82 })
+  })
+
+  test('亮度在题材基色上随活跃度微调', () => {
+    const low = cellPalette('长镜头', 0.2)
+    const high = cellPalette('长镜头', 1)
+    expect(high.lum).toBeGreaterThan(low.lum)
+    expect(Math.abs(high.lum - 55)).toBeLessThanOrEqual(6)
+    expect(Math.abs(low.lum - 55)).toBeLessThanOrEqual(6)
+  })
+
+  test('格子带上题材色相，未知题材回落标准剪辑', () => {
+    const days = new Map<string, CalendarDay>([
+      ['2025-03-04', day('2025-03-04', 2 * HOUR, '长镜头')],
+      ['2025-03-03', day('2025-03-03', 1 * HOUR, '未知题材')]
+    ])
+    const cells = calendarCells(days, TODAY)
+    expect(cells.find((cell) => cell.date === '2025-03-04')).toMatchObject({ hue: 200, sat: 35 })
+    expect(cells.find((cell) => cell.date === '2025-03-03')).toMatchObject({ hue: 45, sat: 8 })
+    expect(cells.find((cell) => cell.date === '2025-03-05')).toMatchObject({ hue: 0, sat: 0, lum: 8 })
   })
 })
 

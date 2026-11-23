@@ -26,7 +26,9 @@ const EMPTY_DAY: DayRollup = {
   cuts: 0,
   longestShot: null,
   topApps: [],
-  verdict: { label: '长镜头', note: '今天还没有形成长镜头。', cutRate: 0 }
+  verdict: { label: '长镜头', note: '今天还没有形成长镜头。', cutRate: 0 },
+  featureMs: 0,
+  extraMs: 0
 }
 
 const EMPTY_LIVE: LiveState = {
@@ -62,6 +64,7 @@ function fakeDeps(): IpcDeps & { calls: Array<[string, unknown[]]> } {
     saveImage: track('saveImage', { path: '' }),
     exportEdl: track('exportEdl', { path: '' }),
     exportPdf: track('exportPdf', { path: '' }),
+    setMark: track('setMark', EMPTY_DAY),
     setHud: track('setHud', { visible: true }),
     quit: track('quit', undefined)
   }

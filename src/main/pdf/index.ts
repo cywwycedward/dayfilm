@@ -46,6 +46,8 @@ function sceneRows(scenes: readonly Scene[]): string[][] {
   return scenes
     .filter((scene) => scene.kind === 'shot')
     .map((scene) => [
+      // 未标记按正片算（与 featureMs 的口径一致），不再留空
+      scene.mark === 'extra' ? '花絮' : '正片',
       `${clock(scene.start)}–${clock(scene.end)}`,
       scene.exe,
       scene.title.trim().length > 0 ? scene.title : '未命名窗口',
@@ -54,8 +56,9 @@ function sceneRows(scenes: readonly Scene[]): string[][] {
 }
 
 function tableRow(cells: readonly string[]): string {
-  const [range, exe, title, length] = cells.map(escapeHtml)
-  return `<tr><td class="num">${range}</td><td>${exe}</td><td>${title}</td><td class="num">${length}</td></tr>`
+  const [mark, range, exe, title, length] = cells.map(escapeHtml)
+  const markClass = mark === '花絮' ? 'num mark-extra' : 'num mark-feature'
+  return `<tr><td class="${markClass}">${mark}</td><td class="num">${range}</td><td>${exe}</td><td>${title}</td><td class="num">${length}</td></tr>`
 }
 
 function sceneTable(scenes: readonly Scene[]): string {
@@ -68,7 +71,7 @@ function sceneTable(scenes: readonly Scene[]): string {
   }
   return [
     '<table>',
-    '<thead><tr><th>时间区间</th><th>应用</th><th>标题</th><th>时长</th></tr></thead>',
+    '<thead><tr><th>标记</th><th>时间区间</th><th>应用</th><th>标题</th><th>时长</th></tr></thead>',
     ...blocks,
     '</table>'
   ].join('')
@@ -129,6 +132,7 @@ const STYLE = `
   }
   td { padding: 5px 6px; border-bottom: 1px solid #1d2126; vertical-align: top; }
   td.num { white-space: nowrap; color: #cfc7b6; }
+  td.mark-extra { color: #8d867a; }
 `
 
 /** 导出 PDF 的最小合理体积：比这小几乎肯定是一张白纸（规格 R53.5）。 */
@@ -161,6 +165,11 @@ export function buildScriptHtml(day: DayRollup, options: ScriptHtmlOptions = {})
   const shotCount = day.scenes.filter((scene) => scene.kind === 'shot').length
   parts.push(
     `<div class="stats">${stat('活跃时长', span(day.activeMs))}${stat('镜头', `${shotCount}`)}${stat('剪辑', `${day.cuts}`)}</div>`
+  )
+
+  // 导演剪辑版：正片 / 花絮占比（v2.4）
+  parts.push(
+    `<p class="projects">正片 ${escapeHtml(span(day.featureMs))} · 花絮 ${escapeHtml(span(day.extraMs))}</p>`
   )
 
   const projects = options.projects && options.projects.length > 0 ? totalByProject(day.scenes, options.projects) : []

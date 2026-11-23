@@ -184,6 +184,20 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 
 累计：`npm run typecheck` exit=0，`npm test` 42 文件 / 589 例通过，`npm run build` 通过，impeccable detector 0 条。
 
+## v2.5 导演剪辑 / 日历色相 / 首次引导 / 放映音效
+
+概念图：`docs/product/ui-concept-v4-editing.png`（A 导演剪辑版标记、B 片场日历题材色相、C 首次运行引导）。
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 导演剪辑版 | 通过 | `setMark(date, startMs, 'extra')` 后 `featureMs` 11432041→11423980、`extraMs` 0→8061，清除后归零；标记按镜头开始时刻存 `marks.json`，镜号变化不受影响；EDL 只导出非花絮并附注释、PDF 汇总加正片/花絮、镜头表加标记列 |
+| 标记 UI | 通过 | 镜头行 hover 出现「正片 / 花絮」两个 24px 小按钮；花絮行整体 56% 不透明度 + 左侧 2px 银灰竖条 + 「花絮」标签；右栏「正片 1 分 / 花絮 0 分」独立成行 |
+| 日历题材色相 | 通过 | 84 格按题材取色（无记录 H—S0 B8、长镜头 H200 S35 B55、标准剪辑 H45 S8 B58、快切 H48 S38 B68、跳切风暴 H30 S62 B82），右侧带图例；实测两天的格子都是暖色（跳切风暴），选中日 1px 琥珀描边 |
+| 首次引导 | 通过 | 清掉 `dayfilm.onboarded` 且当天无素材时，hero 出现不透明引导卡（场记板 + 一句话 + 三步 + 主/次按钮）；点主按钮写 localStorage 后不再出现 |
+| 放映音效 | 通过（听感待人工） | 打开「声音：开」后 AnalyserNode 测得 RMS 0.48–0.50，关闭时 0.00；界面有 3 格电平条，`<html data-audio-level>` 可供自动化读取。音色是否好听需要人耳判断 |
+
+累计：`npm run typecheck` exit=0，`npm test` 42+ 文件 / 615 例通过，`npm run build` 通过，impeccable detector 0 条。
+
 ## 复现命令
 
 ```powershell

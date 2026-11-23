@@ -1,5 +1,5 @@
 /** 界面主体：构建骨架、维护状态、把状态写进 DOM。数据只来自 DayfilmSource。 */
-import type { DayRollup, LiveState, Scene } from '../../shared/types'
+import type { DayRollup, LiveState, Scene, SceneMark } from '../../shared/types'
 import {
   BUILTIN_REDACT_TERMS,
   DEFAULT_SETTINGS,
@@ -19,7 +19,7 @@ import {
   type CompareResult,
   type CompareSide
 } from './lib/compare-days'
-import { CALENDAR_DAYS, calendarCells, calendarDates, type CalendarCell, type CalendarDay } from './lib/calendar'
+import { CALENDAR_DAYS, calendarCells, calendarDates, cellPalette, type CalendarCell, type CalendarDay } from './lib/calendar'
 import {
   SPINE_FRAME_H,
   SPINE_FRAME_MS,
@@ -182,6 +182,7 @@ interface Ui {
   longestShot: HTMLElement
   longestRest: HTMLElement
   projectTotals: HTMLElement
+  statMarks: HTMLElement
   listCount: HTMLElement
   listScroll: HTMLElement
   spacer: HTMLElement
@@ -224,6 +225,7 @@ interface Ui {
   calendarClose: HTMLButtonElement
   calendarGrid: HTMLElement
   calendarProgress: HTMLElement
+  calendarLegend: HTMLElement
   projectCards: HTMLElement
   projectForm: HTMLFormElement
   projectName: HTMLInputElement
@@ -246,6 +248,7 @@ interface Ui {
   projectionStripCanvas: HTMLCanvasElement
   projectionHead: HTMLElement
   soundToggle: HTMLButtonElement
+  audioMeter: HTMLElement
   exitProjection: HTMLButtonElement
   modeDay: HTMLButtonElement
   modeWeek: HTMLButtonElement
@@ -266,6 +269,9 @@ interface Ui {
   winMaxIcon: SVGElement
   winRestoreIcon: SVGElement
   dragRegion: HTMLElement
+  onboarding: HTMLElement
+  onboardStart: HTMLButtonElement
+  onboardSettings: HTMLButtonElement
 }
 
 let state!: State
@@ -388,6 +394,7 @@ function collect(root: HTMLElement): Ui {
     longestShot: pick<HTMLElement>('longestShot'),
     longestRest: pick<HTMLElement>('longestRest'),
     projectTotals: pick<HTMLElement>('projectTotals'),
+    statMarks: pick<HTMLElement>('statMarks'),
     listCount: pick<HTMLElement>('listCount'),
     listScroll: pick<HTMLElement>('listScroll'),
     spacer: pick<HTMLElement>('listSpacer'),
@@ -430,6 +437,7 @@ function collect(root: HTMLElement): Ui {
     calendarClose: pick<HTMLButtonElement>('calendarClose'),
     calendarGrid: pick<HTMLElement>('calendarGrid'),
     calendarProgress: pick<HTMLElement>('calendarProgress'),
+    calendarLegend: pick<HTMLElement>('calendarLegend'),
     projectCards: pick<HTMLElement>('projectCards'),
     projectForm: pick<HTMLFormElement>('projectForm'),
     projectName: pick<HTMLInputElement>('projectName'),
@@ -452,6 +460,7 @@ function collect(root: HTMLElement): Ui {
     projectionStripCanvas: pick<HTMLCanvasElement>('projectionStripCanvas'),
     projectionHead: pick<HTMLElement>('projectionHead'),
     soundToggle: pick<HTMLButtonElement>('soundToggle'),
+    audioMeter: pick<HTMLElement>('audioMeter'),
     exitProjection: pick<HTMLButtonElement>('exitProjection'),
     modeDay: pick<HTMLButtonElement>('modeDay'),
     modeWeek: pick<HTMLButtonElement>('modeWeek'),
@@ -471,7 +480,10 @@ function collect(root: HTMLElement): Ui {
     winClose: pick<HTMLButtonElement>('winClose'),
     winMaxIcon: pick<SVGElement>('winMaxIcon'),
     winRestoreIcon: pick<SVGElement>('winRestoreIcon'),
-    dragRegion: pick<HTMLElement>('dragRegion')
+    dragRegion: pick<HTMLElement>('dragRegion'),
+    onboarding: pick<HTMLElement>('onboarding'),
+    onboardStart: pick<HTMLButtonElement>('onboardStart'),
+    onboardSettings: pick<HTMLButtonElement>('onboardSettings')
   }
 }
 
@@ -698,6 +710,24 @@ function renderHero(): void {
   if (hasData) ui.verdict.textContent = day.verdict.note
   else if (isToday()) ui.verdict.textContent = '还没有拍摄任何素材，今天这卷胶片是空的。'
   else ui.verdict.textContent = '这一天没有采样，胶片是空的。'
+  renderOnboarding()
+}
+
+/** 首次运行引导：只在当天没镜头且未确认过时显示。 */
+const ONBOARDED_KEY = 'dayfilm.onboarded'
+
+function onboardingSeen(): boolean {
+  try {
+    return window.localStorage.getItem(ONBOARDED_KEY) === '1'
+  } catch {
+    return true
+  }
+}
+
+function renderOnboarding(): void {
+  // 开机 2 分钟内（featureMs < 120s）且没确认过才出引导；不再替换三指标，只是 hero 上的覆盖层
+  const show = !onboardingSeen() && state.day.featureMs < 120_000
+  ui.onboarding.hidden = !show
 }
 
 /** 镜头之间（含中场休息）最长的一段空档，秒。 */
@@ -748,6 +778,17 @@ function renderStats(): void {
   ui.metricLongest.textContent = longest ? fmtDuration(longest.seconds) : '—'
   ui.longestRest.textContent =
     day.scenes.length === 0 ? '—' : fmtDuration(longestRestSeconds(day))
+  ui.statMarks.replaceChildren(
+    (() => {
+      const left = node('span', 'stats__marks-main')
+      left.append(
+        node('span', 'stats__marks-label', '正片'),
+        node('b', 'stats__feature', fmtMinutes(day.featureMs))
+      )
+      return left
+    })(),
+    node('span', 'stats__marks-extra', `花絮 ${fmtMinutes(day.extraMs)}`)
+  )
   renderProjectLine(day)
 }
 
@@ -784,17 +825,55 @@ function buildRow(
   const project = scene.kind === 'shot' ? matchProject(scene, state.settings.projects) : null
   if (project) titleCell.append(node('span', 'shot__project', project))
   titleCell.append(node('span', 'shot__title-text', title))
+  const extra = scene.mark === 'extra'
+  if (extra) {
+    button.classList.add('is-extra')
+    titleCell.append(node('span', 'shot__mark', '花絮'))
+  }
   button.append(
     node('span', 'shot__clock', `${stamp}${fmtClock(scene.start)}`),
     titleCell,
     node('span', 'shot__exe', scene.kind === 'intermission' ? '中场休息' : scene.exe),
     node('span', 'shot__dur', fmtDuration(scene.seconds))
   )
+  // hover 才出现的标记按钮：当前态琥珀底黑字
+  if (scene.kind === 'shot') {
+    const marks = node('span', 'shot__marks')
+    for (const mark of ['feature', 'extra'] as const) {
+      const btn = node('button', 'shot__mark-btn', mark === 'feature' ? '正片' : '花絮')
+      btn.type = 'button'
+      btn.dataset.mark = mark
+      if (scene.mark === mark) btn.classList.add('is-active')
+      btn.addEventListener('click', (event) => {
+        event.stopPropagation()
+        void markScene(scene, mark)
+      })
+      marks.append(btn)
+    }
+    button.append(marks)
+  }
   button.addEventListener('click', () => {
     void locate(scene)
   })
   item.append(button)
   return item
+}
+
+/** 标记花絮 / 正片：拿主进程返回的当日汇总整份刷新。 */
+async function markScene(scene: Scene, mark: SceneMark): Promise<void> {
+  const next = scene.mark === mark ? null : mark
+  try {
+    const day = await state.source.setMark(state.date, scene.start, next)
+    state.day = day
+    if (state.live !== null && state.live.day.date === state.date) {
+      state.live = { ...state.live, day }
+    }
+    listSignature = ''
+    windowSignature = ''
+    renderDay()
+  } catch (error) {
+    toast(`标记失败：${messageOf(error)}`)
+  }
 }
 
 /** 列表当前展示的数据：检索结果或当天胶片*/
@@ -942,12 +1021,10 @@ function updateTransport(): void {
   } else {
     const next = state.day.scenes.find((item) => item.start > state.playhead)
     ui.liveExe.textContent = state.day.scenes.length === 0 ? '—' : '空档'
-    ui.liveTitle.textContent =
-      state.day.scenes.length === 0
-        ? emptyCopy()
-        : next
-          ? `没有采样 · 下一镜 ${fmtClock(next.start)}`
-          : '这一天的胶片到此结束'
+    let gapText = '这一天的胶片到此结束'
+    if (state.day.scenes.length === 0) gapText = emptyCopy()
+    else if (next) gapText = `没有采样 · 下一镜 ${fmtClock(next.start)}`
+    ui.liveTitle.textContent = gapText
   }
 
   // 当前镜头时长 / 项目标签
@@ -1206,6 +1283,33 @@ function onProjectionCut(): void {
   projectorAudio.click()
 }
 
+/** 放映音效电平：3 格电平条 + <html data-audio-level>（100ms 一刷）。 */
+let audioMeterTimer = 0
+
+function paintAudioMeter(level: number): void {
+  const thresholds = [0.08, 0.35, 0.65]
+  const bars = [...ui.audioMeter.children]
+  bars.forEach((bar, index) => {
+    bar.classList.toggle('is-on', level > (thresholds[index] ?? 1))
+  })
+}
+
+function startAudioMeter(): void {
+  window.clearInterval(audioMeterTimer)
+  audioMeterTimer = window.setInterval(() => {
+    const level = projectorAudio.level()
+    document.documentElement.dataset.audioLevel = level.toFixed(2)
+    paintAudioMeter(level)
+  }, 100)
+}
+
+function stopAudioMeter(): void {
+  window.clearInterval(audioMeterTimer)
+  audioMeterTimer = 0
+  document.documentElement.dataset.audioLevel = '0.00'
+  paintAudioMeter(0)
+}
+
 function startProjection(): void {
   const selected = state.selectedId
     ? (state.day.scenes.find((scene) => scene.id === state.selectedId) ?? null)
@@ -1225,6 +1329,8 @@ function startProjection(): void {
   ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
   ui.soundToggle.setAttribute('aria-pressed', String(projection.sound))
   projectorAudio.setEnabled(projection.sound)
+  if (projection.sound) startAudioMeter()
+  else stopAudioMeter()
   paintProjectionFrame(false)
   paintProjectionStrip()
   updateProjectionChrome()
@@ -1245,6 +1351,7 @@ function stopProjection(): void {
   projection = exitProjection(projection)
   cancelAnimationFrame(projectionRaf)
   projectorAudio.dispose()
+  stopAudioMeter()
   ui.projection.hidden = true
   state.playing = false
   setPlayButton(false)
@@ -1938,7 +2045,7 @@ async function compareDay(date: string): Promise<DayRollup | null> {
 async function previousDataDate(today: string): Promise<string> {
   const candidates = state.dates
     .filter((date) => date < today)
-    .sort()
+    .sort((a, b) => a.localeCompare(b))
     .reverse()
     .slice(0, COMPARE_LOOKBACK)
   for (const date of candidates) {
@@ -2134,7 +2241,10 @@ function calendarCellNode(cell: CalendarCell, today: string, column: number): HT
   button.style.gridRow = String(cell.dow + 2)
   if (cell.date === today) button.classList.add('is-today')
   if (cell.date === state.date) button.classList.add('is-active')
-  if (cell.level > 0) button.style.background = `rgba(236, 231, 220, ${cell.level.toFixed(3)})`
+  // 题材色相 + 活跃度亮度（无记录 0/0/8%）；未来格不填色
+  if (!cell.future) {
+    button.style.background = `hsl(${cell.hue} ${cell.sat}% ${cell.lum}%)`
+  }
   if (cell.future) {
     button.disabled = true
     button.dataset.future = 'true'
@@ -2151,6 +2261,26 @@ function calendarCellNode(cell: CalendarCell, today: string, column: number): HT
 }
 
 const CALENDAR_ROW_LABELS = ['周一', '周三', '周五'] as const
+
+/** B 块图例：题材类型与色相。 */
+const CALENDAR_LEGEND: readonly { genre: string; text: string }[] = [
+  { genre: '', text: '无记录 · H—S0% B8%' },
+  { genre: '长镜头', text: '长镜头 · H200 S35 B55' },
+  { genre: '标准剪辑', text: '标准剪辑 · H45 S8 B58' },
+  { genre: '快切', text: '快切 · H48 S38 B68' },
+  { genre: '跳切风暴', text: '跳切风暴 · H30 S62 B82' }
+]
+
+function calendarLegendNodes(): HTMLElement[] {
+  return CALENDAR_LEGEND.map((item) => {
+    const row = node('div', 'calendar__legend-row')
+    const swatch = node('i', 'calendar__legend-swatch')
+    const palette = cellPalette(item.genre, 0.5)
+    swatch.style.background = `hsl(${palette.hue} ${palette.sat}% ${palette.lum}%)`
+    row.append(swatch, node('span', 'calendar__legend-text', item.text))
+    return row
+  })
+}
 
 /** 左侧行标签 + 顶部每 4 列一个月份（相邻重复的月份不重复写）。 */
 function calendarLabels(cells: readonly CalendarCell[]): HTMLElement[] {
@@ -2192,6 +2322,10 @@ function renderCalendar(): void {
   ui.calendarGrid.replaceChildren(
     ...calendarLabels(cells),
     ...cells.map((cell, index) => calendarCellNode(cell, today, Math.floor(index / 7)))
+  )
+  ui.calendarLegend.replaceChildren(
+    node('p', 'calendar__legend-title', '题材色相'),
+    ...calendarLegendNodes()
   )
   if (focusedDate !== undefined) {
     ui.calendarGrid.querySelector<HTMLElement>(`[data-date="${focusedDate}"]`)?.focus({ preventScroll: true })
@@ -2585,6 +2719,15 @@ function bindEvents(): void {
   ui.winMax.addEventListener('click', () => windowBridge?.toggleMaximize?.())
   ui.winClose.addEventListener('click', () => windowBridge?.close?.())
   ui.dragRegion.addEventListener('dblclick', () => windowBridge?.toggleMaximize?.())
+  ui.onboardStart.addEventListener('click', () => {
+    try {
+      window.localStorage.setItem(ONBOARDED_KEY, '1')
+    } catch {
+      // 无 localStorage（隐私模式）时只本次隐藏
+    }
+    renderDay()
+  })
+  ui.onboardSettings.addEventListener('click', openPanel)
   applyWindowMaximized(false)
   // 顶栏菜单：导出（脚本/PDF/EDL/海报三主题）与「···」（对比/日历）
   ui.exportMenuBtn.addEventListener('click', () => toggleMenu(ui.exportMenu, ui.exportMenuBtn))
@@ -2680,6 +2823,8 @@ function bindEvents(): void {
   ui.soundToggle.addEventListener('click', () => {
     projection = setProjectionSound(projection, !projection.sound)
     projectorAudio.setEnabled(projection.sound)
+    if (projection.sound) startAudioMeter()
+    else stopAudioMeter()
     ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
     ui.soundToggle.setAttribute('aria-pressed', String(projection.sound))
   })

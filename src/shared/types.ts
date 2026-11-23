@@ -13,6 +13,12 @@ export interface Sample {
 
 export type SceneKind = 'shot' | 'intermission'
 
+/**
+ * 导演剪辑版标记：正片（feature）计入"正片时长"，花絮（extra）只作参考。
+ * 未标记的镜头按正片算。
+ */
+export type SceneMark = 'feature' | 'extra'
+
 /** 一段连续处于同一前台窗口的时间，构成影片中的一个镜头。 */
 export interface Scene {
   id: string
@@ -22,6 +28,8 @@ export interface Scene {
   title: string
   seconds: number
   kind: SceneKind
+  /** 用户手动标记；未标记表示正片 */
+  mark?: SceneMark
 }
 
 export interface TopApp {
@@ -52,6 +60,10 @@ export interface DayRollup {
   longestShot: Scene | null
   topApps: TopApp[]
   verdict: Verdict
+  /** 计入正片的时长（毫秒）：未标记与标记为 feature 的镜头之和 */
+  featureMs: number
+  /** 被标成花絮的时长（毫秒） */
+  extraMs: number
 }
 
 export interface LiveState {

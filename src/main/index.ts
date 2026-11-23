@@ -27,6 +27,7 @@ import {
   type SendChannel,
   type WindowChannel
 } from './ipc'
+import { MarksStore } from './marks'
 import { NotesStore } from './notes'
 import { buildScriptHtml } from './pdf'
 import { writePdf } from './pdf/render'
@@ -59,6 +60,7 @@ const SELF_EXE = basename(process.execPath, '.exe')
 
 let settings: SettingsStore
 let notes: NotesStore
+let marks: MarksStore
 let store: DayStore
 let cache: DayCache
 let writeBuffer: WriteBuffer | null = null
@@ -246,6 +248,19 @@ async function exportPdf(rawDate: unknown): Promise<{ path: string }> {
   return { path: target }
 }
 
+/**
+ * 标记某天的一个镜头（花絮/正片/清除），返回重算后的当日汇总。
+ * 标记变了就把该日从缓存剔除再重算，避免任何一处拿到旧快照。
+ */
+function setMarkAndRollup(date: unknown, startMs: unknown, mark: unknown): DayRollup {
+  if (typeof date !== 'string' || !DATE_PATTERN.test(date)) throw new Error('标记日期不合法')
+  if (typeof startMs !== 'number' || !Number.isFinite(startMs)) throw new Error('标记的镜头时刻不合法')
+  if (mark !== null && mark !== 'feature' && mark !== 'extra') throw new Error('标记类型不合法')
+  marks.set(date, startMs, mark)
+  cache.invalidate(date)
+  return rollupFor(date)
+}
+
 /** 显示/隐藏导演 HUD：界面与托盘共用一个实现，设置落盘后立即生效。 */
 function setHudVisible(visible: unknown): { visible: boolean } {
   const next = Boolean(visible)
@@ -332,6 +347,7 @@ function registerIpc(): void {
     saveImage: (defaultName, pngBase64) => saveImage(defaultName, pngBase64),
     exportEdl: (date) => exportEdl(date),
     exportPdf: (date) => exportPdf(date),
+    setMark: (date, startMs, mark) => setMarkAndRollup(date, startMs, mark),
     setHud: (visible) => setHudVisible(visible),
     quit: () => {
       quitApp()
@@ -603,10 +619,13 @@ if (!app.requestSingleInstanceLock()) {
     const root = app.getPath('userData')
     settings = new SettingsStore(root)
     notes = new NotesStore(root)
+    marks = new MarksStore(root)
     store = new DayStore(root)
     cache = new DayCache({
       load: (date) => store.readDay(date),
-      keep: SELF_EXE.length > 0 ? (sample) => sample.exe !== SELF_EXE : undefined
+      keep: SELF_EXE.length > 0 ? (sample) => sample.exe !== SELF_EXE : undefined,
+      // 标记是读取时叠加的，变了不需要重建增量状态
+      marks: (date) => marks.get(date)
     })
     const buffer = new WriteBuffer({
       write: (sample) => store.append(sample),

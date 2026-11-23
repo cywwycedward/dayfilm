@@ -42,7 +42,9 @@ function day(date: string, scenes: Scene[], apps: TopApp[], cutRate: number): Da
       null
     ),
     topApps: apps,
-    verdict: { label: '标准剪辑', note: `${date} 的点评。`, cutRate }
+    verdict: { label: '标准剪辑', note: `${date} 的点评。`, cutRate },
+    featureMs: 0,
+    extraMs: 0
   }
 }
 

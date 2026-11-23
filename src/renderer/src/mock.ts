@@ -87,6 +87,8 @@ function verdictFor(cuts: number, activeMs: number, longest: Scene | null): Verd
 function rollup(dateISO: string, scenes: Scene[]): DayRollup {
   let activeMs = 0
   let idleMs = 0
+  let featureMs = 0
+  let extraMs = 0
   let cuts = 0
   let previous: SceneKind | null = null
   let longest: Scene | null = null
@@ -94,6 +96,8 @@ function rollup(dateISO: string, scenes: Scene[]): DayRollup {
   for (const scene of scenes) {
     if (scene.kind === 'shot') {
       activeMs += scene.seconds * 1000
+      if (scene.mark === 'extra') extraMs += scene.seconds * 1000
+      else featureMs += scene.seconds * 1000
       if (previous === 'shot') cuts += 1
       byExe.set(scene.exe, (byExe.get(scene.exe) ?? 0) + scene.seconds)
       if (!longest || scene.seconds > longest.seconds) longest = scene
@@ -111,6 +115,8 @@ function rollup(dateISO: string, scenes: Scene[]): DayRollup {
     firstAt: scenes.length > 0 ? scenes[0].start : null,
     lastAt: scenes.length > 0 ? scenes[scenes.length - 1].end : null,
     activeMs,
+    featureMs,
+    extraMs,
     idleMs,
     scenes,
     cuts,

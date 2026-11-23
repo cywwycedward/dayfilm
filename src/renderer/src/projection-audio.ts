@@ -6,6 +6,8 @@ export interface ProjectorAudio {
   setEnabled(on: boolean): void
   click(): void
   dispose(): void
+  /** 最近一段（~200ms）的 RMS 电平，0–1；未开启或无 AudioContext 时为 0。 */
+  level(): number
 }
 
 interface Noise {
@@ -20,6 +22,8 @@ function noop(): void {
 export function createProjectorAudio(): ProjectorAudio {
   let ctx: AudioContext | null = null
   let noise: Noise | null = null
+  let analyser: AnalyserNode | null = null
+  let samples: Float32Array<ArrayBuffer> | null = null
 
   const ensure = (): AudioContext | null => {
     if (ctx) return ctx
@@ -52,7 +56,13 @@ export function createProjectorAudio(): ProjectorAudio {
     band.Q.value = 0.7
     const gain = context.createGain()
     gain.gain.value = 0.014
-    source.connect(band).connect(gain).connect(context.destination)
+    // 电平表：8192 样本 ≈ 170ms（48kHz），接近“最近 200ms”
+    const meter = context.createAnalyser()
+    meter.fftSize = 8192
+    meter.smoothingTimeConstant = 0.4
+    samples = new Float32Array(new ArrayBuffer(meter.fftSize * 4))
+    analyser = meter
+    source.connect(band).connect(gain).connect(meter).connect(context.destination)
     source.start()
     return { source, gain }
   }
@@ -71,7 +81,18 @@ export function createProjectorAudio(): ProjectorAudio {
         noise.source.disconnect()
         noise.gain.disconnect()
         noise = null
+        analyser = null
+        samples = null
       }
+    },
+    level(): number {
+      if (!analyser || !samples) return 0
+      analyser.getFloatTimeDomainData(samples)
+      let sum = 0
+      for (const value of samples) sum += value * value
+      const rms = Math.sqrt(sum / samples.length)
+      // 底噪 RMS 约 0.0012（gain 后），×350 ≈ 0.45 能亮两格；剪辑咔哒会顶到满格
+      return Math.min(1, rms * 350)
     },
     click(): void {
       if (!ctx || !noise) return
@@ -111,6 +132,8 @@ export function createProjectorAudio(): ProjectorAudio {
         void ctx.close().catch(noop)
         ctx = null
       }
+      analyser = null
+      samples = null
     }
   }
 }

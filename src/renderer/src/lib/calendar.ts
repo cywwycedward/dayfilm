@@ -23,6 +23,10 @@ export interface CalendarCell {
   dow: number
   /** 0 = 没有采样（画 2px 暗格）；>0 是 18%–82% 的暖白强度 */
   level: number
+  /** 题材色相：无记录 0/0/8，长镜头 200/35/55，标准剪辑 45/8/58，快切 48/38/68，跳切风暴 30/62/82 */
+  hue: number
+  sat: number
+  lum: number
   activeMs: number
   genre: string
   shots: number
@@ -45,6 +49,29 @@ export function calendarDates(today: string): string[] {
   return dates
 }
 
+export interface GenrePalette {
+  hue: number
+  sat: number
+  lum: number
+}
+
+/** 题材 → 色相（ui-concept-v4 B 块）；未列出的题材按“标准剪辑”处理。 */
+export const GENRE_PALETTE: Readonly<Record<string, GenrePalette>> = {
+  '长镜头': { hue: 200, sat: 35, lum: 55 },
+  '标准剪辑': { hue: 45, sat: 8, lum: 58 },
+  '快切': { hue: 48, sat: 38, lum: 68 },
+  '跳切风暴': { hue: 30, sat: 62, lum: 82 }
+}
+export const NO_RECORD_PALETTE: GenrePalette = { hue: 0, sat: 0, lum: 8 }
+
+/** 题材与活跃度 → 格子颜色：亮度在题材基色上微调（±6）。 */
+export function cellPalette(genre: string, level: number): GenrePalette {
+  if (genre.length === 0) return NO_RECORD_PALETTE
+  const base = GENRE_PALETTE[genre] ?? GENRE_PALETTE['标准剪辑']
+  const lum = Math.round(Math.min(92, Math.max(8, base.lum - 6 + level * 12)))
+  return { hue: base.hue, sat: base.sat, lum }
+}
+
 export function calendarCells(
   days: ReadonlyMap<string, CalendarDay>,
   today: string
@@ -59,12 +86,17 @@ export function calendarCells(
     const day = days.get(date)
     const activeMs = day?.activeMs ?? 0
     const level = peak > 0 && activeMs > 0 ? LEVEL_MIN + LEVEL_SPAN * Math.sqrt(activeMs / peak) : 0
+    const genre = day?.genre ?? ''
+    const palette = cellPalette(genre, level)
     return {
       date,
       dow: index % 7,
       level,
+      hue: palette.hue,
+      sat: palette.sat,
+      lum: palette.lum,
       activeMs,
-      genre: day?.genre ?? '',
+      genre,
       shots: day?.shots ?? 0,
       future: date > today
     }

@@ -41,7 +41,7 @@ function day(scenes: Scene[]): DayRollup {
     cuts: Math.max(0, scenes.length - 1),
     longestShot: scenes[0] ?? null,
     topApps: [],
-    verdict: { label: '标准剪辑', note: '', cutRate: 0 }
+    verdict: { label: '标准剪辑', note: '', cutRate: 0 },    featureMs: 0,    extraMs: 0
   }
 }
 

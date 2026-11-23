@@ -20,6 +20,8 @@ function rollup(id: string, scenes: Scene[]): DayRollup {
     firstAt: scenes[0]?.start ?? null,
     lastAt: scenes[scenes.length - 1]?.end ?? null,
     activeMs: 0,
+    featureMs: 0,
+    extraMs: 0,
     idleMs: 0,
     scenes,
     cuts: 0,

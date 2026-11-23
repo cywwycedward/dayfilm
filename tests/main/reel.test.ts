@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDayRollup, renderScreenplay, searchScenes } from '../../src/main/reel'
+import { applyMarks, buildDayRollup, renderScreenplay, searchScenes } from '../../src/main/reel'
 import type { DayRollup, Sample } from '../../src/shared/types'
 
 const STEP = 2000
@@ -275,15 +275,77 @@ describe('renderScreenplay', () => {
     const lines = renderScreenplay(day, { projects }).trimEnd().split('\n')
     const titleIndex = lines.findIndex((line) => line.startsWith('题材：'))
     expect(titleIndex).toBeGreaterThan(0)
-    expect(lines[titleIndex + 1]).toBe('项目：设计 4 分钟 · 其他 3 分钟 · 沟通 2 分钟')
-    expect(lines[titleIndex + 2]).toBe('')
+    // 题材 → 正片/花絮 → 项目 → 空行 → 镜头行
+    expect(lines[titleIndex + 1]).toBe('正片 10 分钟 · 花絮 0 分钟')
+    expect(lines[titleIndex + 2]).toBe('项目：设计 4 分钟 · 其他 3 分钟 · 沟通 2 分钟')
+    expect(lines[titleIndex + 3]).toBe('')
     // 镜头行格式不变
-    expect(lines[titleIndex + 3]).toBe('- [09:00–09:01] Code · dayfilm（1m）')
+    expect(lines[titleIndex + 4]).toBe('- [09:00–09:01] Code · dayfilm（1m）')
   })
 
   it('没有项目命中、或没有规则时不出项目行', () => {
     const day = new Day().shot('Code', 'dayfilm', 600).rollup()
     expect(renderScreenplay(day, { projects: [] }).includes('项目：')).toBe(false)
     expect(renderScreenplay(day, { projects: [{ name: 'A', terms: ['nope'] }] }).includes('项目：')).toBe(false)
+  })
+
+  it('汇总段带正片/花絮时长', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 600)
+    const base = builder.rollup()
+    const extraStart = String(base.scenes[0].start)
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { [extraStart]: 'extra' })
+    expect(renderScreenplay(marked)).toContain('正片 0 分钟 · 花絮 10 分钟')
+    expect(renderScreenplay(base)).toContain('正片 10 分钟 · 花絮 0 分钟')
+  })
+})
+
+describe('导演剪辑版标记', () => {
+  it('标记写进镜头，正片 + 花絮 = 活跃时长', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 10).shot('Slack', '#general', 20)
+    const plain = builder.rollup()
+    const extraStart = String(plain.scenes[1].start)
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { [extraStart]: 'extra' })
+
+    expect(marked.scenes[1].mark).toBe('extra')
+    expect(marked.scenes[0].mark).toBeUndefined()
+    expect(marked.extraMs).toBe(plain.scenes[1].end - plain.scenes[1].start)
+    expect(marked.featureMs).toBe(plain.scenes[0].end - plain.scenes[0].start)
+    expect(marked.featureMs + marked.extraMs).toBe(marked.activeMs)
+    // 标记不影响切分与题材
+    expect(marked.cuts).toBe(plain.cuts)
+    expect(marked.verdict).toEqual(plain.verdict)
+  })
+
+  it('未标记时全部算正片', () => {
+    const rollup = new Day().shot('Code', 'dayfilm', 10).idle(120).rollup()
+    expect(rollup.extraMs).toBe(0)
+    expect(rollup.featureMs).toBe(rollup.activeMs)
+    expect(rollup.scenes.every((scene) => scene.mark === undefined)).toBe(true)
+  })
+
+  it('显式标成正片也算正片', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 10)
+    const start = String(builder.rollup().scenes[0].start)
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { [start]: 'feature' })
+    expect(marked.scenes[0].mark).toBe('feature')
+    expect(marked.featureMs).toBe(marked.activeMs)
+    expect(marked.extraMs).toBe(0)
+  })
+
+  it('对不上任何镜头的旧标记被忽略', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 10)
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { '999': 'extra' })
+    expect(marked.extraMs).toBe(0)
+    expect(marked.featureMs).toBe(marked.activeMs)
+  })
+
+  it('applyMarks 不改其它字段', () => {
+    const rollup = new Day().shot('Code', 'dayfilm', 10).idle(120).rollup()
+    const start = String(rollup.scenes[0].start)
+    const marked = applyMarks(rollup, { [start]: 'extra' })
+    expect(marked.date).toBe(rollup.date)
+    expect(marked.idleMs).toBe(rollup.idleMs)
+    expect(marked.scenes[1]).toBe(rollup.scenes[1])
+    expect(marked.extraMs).toBe(rollup.scenes[0].end - rollup.scenes[0].start)
   })
 })

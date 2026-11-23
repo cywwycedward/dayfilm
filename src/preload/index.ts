@@ -16,6 +16,7 @@ const api: DayfilmApi = {
   saveImage: (defaultName, pngBase64) => ipcRenderer.invoke(IPC.saveImage, defaultName, pngBase64),
   exportEdl: (date) => ipcRenderer.invoke(IPC.exportEdl, date),
   exportPdf: (date) => ipcRenderer.invoke(IPC.exportPdf, date),
+  setMark: (date, startMs, mark) => ipcRenderer.invoke(IPC.setMark, date, startMs, mark),
   setHud: (visible) => ipcRenderer.invoke(IPC.setHud, visible),
   quit: () => ipcRenderer.invoke(IPC.quit),
   onTick: (cb) => {

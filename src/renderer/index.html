@@ -145,6 +145,27 @@
             <span class="note__count" id="noteCount">0/200</span>
           </div>
 
+          <section class="onboarding" id="onboarding" hidden>
+            <div class="onboarding__art">
+              <p class="onboarding__prod">PRODUCTION DAYFILM</p>
+              <p class="onboarding__slate">SCENE 001 · TAKE 01</p>
+              <p class="onboarding__tc">00:00:00:00</p>
+            </div>
+            <div class="onboarding__body">
+              <h2 class="onboarding__title">今天还没有镜头。准备开始拍摄。</h2>
+              <ul class="onboarding__points">
+                <li><b>1</b><span>只记录窗口名与标题，不截屏、不联网。</span></li>
+                <li><b>2</b><span>导演 HUD 是一个置顶小窗，随时看正在拍摄什么。</span></li>
+                <li><b>3</b><span>数据保存在本机，可随时删除或清空。</span></li>
+              </ul>
+              <div class="onboarding__actions">
+                <button class="btn onboarding__primary" id="onboardStart" type="button">知道了，开始拍摄</button>
+                <button class="btn onboarding__secondary" id="onboardSettings" type="button">打开设置</button>
+                <span class="onboarding__hint">首次运行，不打断使用。</span>
+              </div>
+            </div>
+          </section>
+
           <section class="highlights" id="highlights" aria-label="今日高光"></section>
         </section>
 
@@ -198,6 +219,7 @@
               <span>工作镜头的剪辑摘要</span>
             </header>
             <dl class="stats" id="metrics"></dl>
+            <p class="stats__marks" id="statMarks"></p>
             <p class="stats__line">
               <span>最长镜头</span><b id="longestShot">…</b>
             </p>
@@ -276,6 +298,7 @@
             <i class="projection__head" id="projectionHead"></i>
           </div>
           <div class="projection__controls">
+            <span class="audio-meter" id="audioMeter" aria-hidden="true"><i></i><i></i><i></i></span>
             <button class="btn" id="soundToggle" type="button" aria-pressed="false">声音：关</button>
             <button class="btn" id="exitProjection" type="button">退出放映</button>
           </div>
@@ -393,7 +416,10 @@
             <span class="calendar__progress" id="calendarProgress" role="status"></span>
             <button class="btn btn--quiet" id="calendarClose" type="button">关闭</button>
           </header>
-          <div class="calendar" id="calendarGrid" role="grid" aria-label="近 12 周的活动"></div>
+          <div class="calendar-wrap">
+            <div class="calendar" id="calendarGrid" role="grid" aria-label="近 12 周的活动"></div>
+            <aside class="calendar__legend" id="calendarLegend" aria-label="题材色相图例"></aside>
+          </div>
         </section>
       </div>
     </div>

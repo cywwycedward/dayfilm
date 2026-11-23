@@ -4114,3 +4114,412 @@ input[type='checkbox']:focus-visible {
   color: #f0c7c1;
   text-decoration: underline;
 }
+
+/* ==========================================================================
+   v2.5 导演剪辑标记 / 片场日历题材色相 / 首次运行引导
+   ========================================================================== */
+
+/* B 块：日历 24px、gap 2、题材色相 + 图例 */
+.calendar-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s5);
+}
+
+.calendar {
+  grid-template-columns: 42px repeat(12, 24px);
+  grid-template-rows: 14px repeat(7, 24px);
+  gap: 2px;
+}
+
+.calendar__cell {
+  width: 24px;
+  height: 24px;
+  border-radius: 2px;
+}
+
+/* 选中的一天：1px 琥珀外描边 + 内阴影 */
+.calendar__cell.is-active {
+  outline: 1px solid #e8b45a;
+  outline-offset: 1px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+
+.calendar__legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 180px;
+  padding-left: var(--s4);
+  border-left: 1px solid var(--hairline);
+}
+
+.calendar__legend-title {
+  margin: 0 0 var(--s1);
+  font: 10px/1.3 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  opacity: 0.5;
+}
+
+.calendar__legend-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font: 11px/1.4 var(--font-mono);
+  color: var(--paper-dim);
+}
+
+.calendar__legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  flex: none;
+}
+
+/* A 块：花絮行 + hover 标记按钮 */
+.recent .shot {
+  position: relative;
+}
+
+.recent .shot.is-extra {
+  opacity: 0.56;
+}
+
+.recent .shot.is-extra::before {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  left: 0;
+  width: 2px;
+  background: #9aa0a6;
+}
+
+.recent .shot__mark {
+  flex: none;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: rgba(236, 231, 220, 0.04);
+  color: #9aa0a6;
+  font: 400 12px/1.4 var(--font-ui);
+}
+
+.recent .shot__marks {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: none;
+  gap: var(--s2);
+  transform: translateY(-50%);
+}
+
+.recent .shot:hover .shot__marks,
+.recent .shot:focus-within .shot__marks {
+  display: flex;
+}
+
+.recent .shot__mark-btn {
+  height: 24px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 2px;
+  background: var(--panel);
+  color: var(--paper-dim);
+  font: 400 11px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.recent .shot__mark-btn:hover {
+  color: var(--paper);
+  border-color: rgba(236, 231, 220, 0.3);
+}
+
+.recent .shot__mark-btn.is-active {
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--ink);
+}
+
+.recent .shot__mark-btn:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* 今日统计下方的正片 / 花絮一行 */
+.stats__marks {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  margin: var(--s1) 0 0;
+  font: 400 12px/1.4 var(--font-mono);
+  color: #9aa0a6;
+}
+
+.stats__feature {
+  font-size: 16px;
+  color: var(--paper);
+}
+
+.stats__sep {
+  color: rgba(236, 231, 220, 0.32);
+}
+
+.stats__extra {
+  color: #9aa0a6;
+}
+
+/* C 块：首次运行引导 */
+.onboarding {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--s5);
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: var(--s3);
+  border: 1px solid var(--panel-line);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.onboarding[hidden] {
+  display: none;
+}
+
+.onboarding__art {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding: var(--s5);
+  background-image: linear-gradient(rgba(10, 11, 13, 0.45), rgba(10, 11, 13, 0.8)),
+    url('./assets/clapper-strip.png');
+  background-position: center 40%;
+  background-size: cover;
+}
+
+.onboarding__prod,
+.onboarding__slate,
+.onboarding__tc {
+  margin: 0;
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  color: rgba(236, 231, 220, 0.72);
+}
+
+.onboarding__tc {
+  font-size: 20px;
+  color: var(--amber);
+}
+
+.onboarding__body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--s4);
+  padding: var(--s5) var(--s5) var(--s5) 0;
+}
+
+.onboarding__title {
+  margin: 0;
+  font: 700 28px/1.25 var(--font-ui);
+  letter-spacing: 0.02em;
+  color: var(--paper);
+}
+
+.onboarding__points {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.onboarding__points li {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: var(--s2);
+  align-items: baseline;
+  font: 400 13px/1.6 var(--font-ui);
+  color: var(--paper-dim);
+}
+
+.onboarding__points b {
+  font: 400 11px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--amber);
+}
+
+.onboarding__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.onboarding__primary,
+.onboarding__secondary {
+  height: 40px;
+  padding: 0 20px;
+  border-radius: 2px;
+  font: 400 13px/1 var(--font-ui);
+}
+
+.onboarding__primary {
+  border: none;
+  background: #e8b45a;
+  color: #0a0b0d;
+}
+
+.onboarding__primary:hover:not(:disabled) {
+  background: #f0c374;
+  color: #0a0b0d;
+  text-decoration: none;
+}
+
+.onboarding__secondary {
+  border: 1px solid #454a50;
+  background: #131518;
+  color: #ece7dc;
+}
+
+.onboarding__secondary:hover:not(:disabled) {
+  border-color: #5a6066;
+  color: #ffffff;
+  text-decoration: none;
+}
+
+.onboarding__hint {
+  font: 11px/1.5 var(--font-mono);
+  color: rgba(236, 231, 220, 0.32);
+}
+
+/* ==========================================================================
+   v2.6 放映音效电平 / 正片花絮行间距
+   ========================================================================== */
+
+.audio-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-right: var(--s2);
+}
+
+.audio-meter i {
+  width: 12px;
+  height: 3px;
+  background: rgba(236, 231, 220, 0.14);
+  transition: background 100ms var(--ease);
+}
+
+.audio-meter i.is-on {
+  background: var(--amber);
+}
+
+/* 正片 / 花絮单独一行：标签 10px mono 大写，与项目行隔 8px */
+.stats__marks {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0;
+  margin: var(--s1) 0 0;
+}
+
+.stats__marks-label {
+  margin-right: var(--s2);
+  font: 10px/1.3 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  opacity: 0.45;
+}
+
+.stats__line--project {
+  margin-top: 0;
+}
+
+/* ==========================================================================
+   v2.6b 首次引导覆盖层 / 正片花絮行间距
+   ========================================================================== */
+
+.hero {
+  position: relative;
+}
+
+/* 卡片是 hero 的覆盖层：半透明墨底 + 1px 发丝线，不替换三指标 */
+.onboarding {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--s5);
+  margin: 0;
+  border: 1px solid var(--hairline);
+  background: rgba(10, 11, 13, 0.94);
+  overflow: hidden;
+}
+
+.onboarding[hidden] {
+  display: none;
+}
+
+/* 正片/花絮独立一行：与上一行 12px，与项目行也 12px */
+.stats__marks {
+  margin: 4px 0 0;
+}
+
+.stats__line--project {
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   v2.6c 引导卡片不透明 / 正片花絮通栏一行
+   ========================================================================== */
+
+/* C 块：卡片改成不透明深色渐变，盖住下面的 hero 内容 */
+.onboarding {
+  background: linear-gradient(#0f1114, #131518);
+}
+
+/* 正片/花絮：在三列数字下方 12px 的独立通栏一行 */
+.stats__marks {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s2);
+  width: 100%;
+  margin: 4px 0 0; /* 叠加右栏块 gap 8 = 与数字行 12px */
+}
+
+.stats__marks-main {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.stats__marks-label {
+  font: 10px/1.3 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--paper-dim);
+  opacity: 0.45;
+}
+
+.stats__feature {
+  font: 400 16px/1.2 var(--font-mono);
+  color: var(--paper);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.stats__marks-extra {
+  font: 400 12px/1.2 var(--font-mono);
+  color: #9aa0a6;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

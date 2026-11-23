@@ -116,7 +116,10 @@ export class DayAggregator {
       cuts,
       longestShot: longest ? longest.scene : null,
       topApps,
-      verdict: judge(cutRate, longest)
+      verdict: judge(cutRate, longest),
+      // 这里只算未标记的基线；标记由 DayCache 用 applyMarks 覆盖上去
+      featureMs: activeMs,
+      extraMs: 0
     }
   }
 

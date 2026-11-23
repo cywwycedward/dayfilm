@@ -18,7 +18,7 @@ function shot(startMs: number, endMs: number, exe = 'Code', title = 'dayfilm - V
   }
 }
 
-function day(scenes: Scene[], patch: Partial<DayRollup> = {}): DayRollup {
+function day(scenes: Scene[], patch: Partial<Omit<DayRollup, 'featureMs' | 'extraMs'>> = {}): DayRollup {
   return {
     date: DATE,
     firstAt: T0,
@@ -30,6 +30,8 @@ function day(scenes: Scene[], patch: Partial<DayRollup> = {}): DayRollup {
     longestShot: null,
     topApps: [],
     verdict: { label: '标准剪辑', note: '最长的一个镜头是 Code 的 10 分钟。', cutRate: 4 },
+    featureMs: 600_000,
+    extraMs: 0,
     ...patch
   }
 }
@@ -120,7 +122,7 @@ describe('buildScriptHtml', () => {
       kind: 'intermission'
     }
     const html = buildScriptHtml(day([shot(0, 120_000), intermission, shot(420_000, 600_000, 'Slack', '#general')]))
-    const rows = html.match(/<tr><td class="num">/g) ?? []
+    const rows = html.match(/<tr><td class="num mark-/g) ?? []
     expect(rows).toHaveLength(2)
     expect(html).toContain('<td class="num">09:00–09:02</td><td>Code</td><td>dayfilm - Visual Studio Code</td><td class="num">2m</td>')
     expect(html).toContain('<td class="num">09:07–09:10</td><td>Slack</td><td>#general</td><td class="num">3m</td>')
@@ -186,5 +188,24 @@ describe('isEmptyPdf', () => {
     expect(isEmptyPdf(Buffer.alloc(0))).toBe(true)
     expect(isEmptyPdf(Buffer.alloc(MIN_PDF_BYTES + 1))).toBe(false)
     expect(isEmptyPdf(new Uint8Array(MIN_PDF_BYTES - 1))).toBe(true)
+  })
+})
+
+describe('PDF 导演剪辑版（v2.4）', () => {
+  it('汇总有正片/花絮，表格首列是标记', () => {
+    const scenes = [{ ...shot(0, 600_000), mark: 'extra' as const }, shot(600_000, 1_200_000, 'Slack', '#general')]
+    const base = day(scenes)
+    const html = buildScriptHtml({ ...base, featureMs: 600_000, extraMs: 600_000 })
+
+    expect(html).toContain('正片 10 分钟 · 花絮 10 分钟')
+    expect(html).toContain('<th>标记</th>')
+    expect(html).toContain('<td class="num mark-extra">花絮</td>')
+    // 未标记按正片算（与 featureMs 口径一致）
+    expect(html).toContain('<td class="num mark-feature">正片</td>')
+  })
+
+  it('没有花絮时汇总写 0 分钟', () => {
+    const html = buildScriptHtml(day([shot(0, 600_000)]))
+    expect(html).toContain('正片 10 分钟 · 花絮 0 分钟')
   })
 })

@@ -32,7 +32,9 @@ function rollup(scenes: Scene[], topApps: TopApp[] = []): DayRollup {
     cuts: Math.max(0, scenes.length - 1),
     longestShot: scenes.reduce<Scene | null>((best, scene) => (!best || scene.seconds > best.seconds ? scene : best), null),
     topApps,
-    verdict: { label: '标准剪辑', note: '', cutRate: 0 }
+    verdict: { label: '标准剪辑', note: '', cutRate: 0 },
+    featureMs: 0,
+    extraMs: 0
   }
 }
 

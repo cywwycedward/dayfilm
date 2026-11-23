@@ -110,3 +110,32 @@ describe('DayCache', () => {
     expect(after.scenes[0].start).toBeGreaterThan(late + DAY_MS - 2000)
   })
 })
+
+describe('标记叠加', () => {
+  const date = '2026-11-22'
+  const samples = [sample(T0), sample(T0 + 2000), sample(T0 + 4000, 'Slack', 'inbox'), sample(T0 + 6000, 'Slack', 'inbox')]
+
+  it('缓存汇总与带标记的全量计算一致', () => {
+    const marks = { [String(T0)]: 'extra' as const }
+    const cache = new DayCache({ load: () => samples, marks: () => marks })
+    expect(cache.rollup(date, T0 + 8000)).toEqual(buildDayRollup(samples, date, T0 + 8000, marks))
+  })
+
+  it('标记变了，下一次 rollup 就是新结果', () => {
+    let marks: Record<string, 'feature' | 'extra'> = {}
+    const cache = new DayCache({ load: () => samples, marks: () => marks })
+    expect(cache.rollup(date, T0 + 8000).extraMs).toBe(0)
+
+    marks = { [String(T0)]: 'extra' }
+    const marked = cache.rollup(date, T0 + 8000)
+    expect(marked.extraMs).toBe(4000)
+    expect(marked.featureMs + marked.extraMs).toBe(marked.activeMs)
+  })
+
+  it('没有 marks 选项时全部算正片', () => {
+    const cache = new DayCache({ load: () => samples })
+    const rollup = cache.rollup(date, T0 + 8000)
+    expect(rollup.extraMs).toBe(0)
+    expect(rollup.featureMs).toBe(rollup.activeMs)
+  })
+})

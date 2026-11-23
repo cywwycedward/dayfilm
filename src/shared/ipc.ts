@@ -1,5 +1,5 @@
 import type { Settings } from './settings'
-import type { DayRollup, LiveState, Scene, ScreenplayExport } from './types'
+import type { DayRollup, LiveState, Scene, SceneMark, ScreenplayExport } from './types'
 
 /** IPC 通道名。主进程与 preload 共用，避免字符串漂移。 */
 export const IPC = {
@@ -15,6 +15,7 @@ export const IPC = {
   saveImage: 'dayfilm:save-image',
   exportEdl: 'dayfilm:export-edl',
   exportPdf: 'dayfilm:export-pdf',
+  setMark: 'dayfilm:set-mark',
   setHud: 'dayfilm:set-hud',
   quit: 'dayfilm:quit',
   tick: 'dayfilm:tick'
@@ -40,6 +41,8 @@ export interface DayfilmApi {
   exportEdl(date: string): Promise<{ path: string }>
   /** 把某一天的剧本导出成 PDF，返回落盘路径；取消返回空串。 */
   exportPdf(date: string): Promise<{ path: string }>
+  /** 给某个镜头打标记（正片 / 花絮 / 清除），返回重算后的当日汇总。 */
+  setMark(date: string, startMs: number, mark: SceneMark | null): Promise<DayRollup>
   /** 显示/隐藏导演 HUD，返回切换后的状态。 */
   setHud(visible: boolean): Promise<{ visible: boolean }>
   /** 真正退出应用（含停止采集）。 */
