@@ -227,6 +227,7 @@ interface Ui {
   compareClose: HTMLButtonElement
   compareLeft: HTMLElement
   compareRight: HTMLElement
+  compareChart: HTMLElement
   compareDiff: HTMLElement
   calendarOpenBtn: HTMLButtonElement
   calendar: HTMLElement
@@ -427,6 +428,7 @@ function collect(root: HTMLElement): Ui {
     compareClose: pick<HTMLButtonElement>('compareClose'),
     compareLeft: pick<HTMLElement>('compareLeft'),
     compareRight: pick<HTMLElement>('compareRight'),
+    compareChart: pick<HTMLElement>('compareChart'),
     compareDiff: pick<HTMLElement>('compareDiff'),
     calendarOpenBtn: pick<HTMLButtonElement>('calendarOpen'),
     calendar: pick<HTMLElement>('calendar'),
@@ -982,8 +984,12 @@ const next = state.day.scenes.find((item) => item.start > state.playhead) ?? nul
   const max = material ? Math.max(min + 1, Math.ceil((material.end - dayStart()) / 60_000)) : 1440
   if (ui.scrub.min !== String(min)) ui.scrub.min = String(min)
   if (ui.scrub.max !== String(max)) ui.scrub.max = String(max)
-  const minutes = String(Math.round((state.playhead - dayStart()) / 60_000))
+  const minuteValue = Math.round((state.playhead - dayStart()) / 60_000)
+  const minutes = String(minuteValue)
   if (ui.scrub.value !== minutes) ui.scrub.value = minutes
+  // 已播放段：轨道渐变用（§8.2），只在这里写一次
+  const played = max > min ? Math.min(1, Math.max(0, (minuteValue - min) / (max - min))) : 0
+  ui.scrub.style.setProperty('--played', `${(played * 100).toFixed(1)}%`)
   const code = `${fmtClock(state.playhead)} / 24:00`
   if (code !== timecodeKey) {
     timecodeKey = code
@@ -1127,7 +1133,9 @@ function paintProjectionFrame(animate: boolean): void {
       ctx,
       rect.width,
       rect.height,
-      next ? `空档 · 下一镜 ${fmtClock(next.start)}` : '这一天的胶片到此结束'
+      next
+        ? `摄影机未运行 · 下一镜 ${fmtClock(next.start)}`
+        : '摄影机未运行 · 这一天的胶片到此结束'
     )
   }
   if (animate) {
@@ -2180,7 +2188,7 @@ function closeCompare(): void {
   ui.compareOpenBtn.focus({ preventScroll: true })
 }
 
-function compareSideNodes(side: CompareSide, date: string, which: 'left' | 'right'): HTMLElement[] {
+function compareDayNodes(side: CompareSide, date: string, which: 'left' | 'right'): HTMLElement[] {
   const today = isoDate(Date.now())
   const select = node('select', 'compare__date')
   select.dataset.side = which
@@ -2194,47 +2202,67 @@ function compareSideNodes(side: CompareSide, date: string, which: 'left' | 'righ
     })
   )
   select.value = date
-
-  const genre = node('p', 'compare__genre', side.empty ? '没有采样' : side.genre)
-  const note = node('p', 'compare__note', side.empty ? '这一天没有镜头。' : side.note)
-
-  const metrics = node('dl', 'compare__metrics')
-  for (const metric of side.metrics) {
-    const cell = node('div', 'compare__metric')
-    cell.append(node('dt', undefined, metric.label), node('dd', undefined, metric.value))
-    metrics.append(cell)
-  }
-
-  const strip = node('button', 'compare__strip')
-  strip.type = 'button'
-  strip.dataset.date = date
-  strip.dataset.side = which
-  strip.disabled = side.empty
-  strip.setAttribute('aria-label', side.empty ? `${date} 没有素材` : `切到 ${date} 的日视图`)
-  strip.append(node('canvas'))
-
-  const apps = node('div', 'compare__apps')
-  if (side.apps.length === 0) {
-    apps.append(node('p', 'compare__empty', '—'))
-  } else {
-    for (const app of side.apps) {
-      const row = node('div', 'compare__app')
-      const swatch = node('i')
-      swatch.style.background = familyColor(app.hue, 0.7)
-      row.append(swatch, node('span', undefined, app.exe), node('span', undefined, app.value))
-      apps.append(row)
-    }
-  }
-
-  return [select, genre, note, metrics, strip, apps]
+  return [
+    select,
+    node(
+      'span',
+      side.empty ? 'compare__genre compare__genre--empty' : 'compare__genre',
+      side.empty ? '没有采样' : side.genre
+    )
+  ]
 }
 
+/** 两卷胶片 + 一条共享的时刻刻度（两天的并集范围）。 */
+function compareChartNodes(result: CompareResult): HTMLElement[] {
+  const sides: [CompareSide, string, 'left' | 'right'][] = [
+    [result.left, state.compareDates.left, 'left'],
+    [result.right, state.compareDates.right, 'right']
+  ]
+  const nodes: HTMLElement[] = sides.map(([side, date, which]) => {
+    const band = node('button', 'compare__band')
+    band.type = 'button'
+    band.dataset.date = date
+    band.dataset.side = which
+    band.disabled = side.empty
+    band.setAttribute('aria-label', side.empty ? `${date} 没有素材` : `切到 ${date} 的日视图`)
+    const bar = node('i', 'compare__band-bar')
+    bar.style.background = familyColor(side.hue, 0.8)
+    band.append(bar, node('canvas'))
+    return band
+  })
+
+  const axis = node('div', 'compare__axis')
+  const span = result.range === null ? 1 : Math.max(1, result.range.end - result.range.start)
+  result.ticks.forEach((tick, index) => {
+    const ratio = result.range === null ? 0 : (tick.at - result.range.start) / span
+    const label = node('span', 'compare__axis-tick', tick.label)
+    label.style.left = `${Math.min(100, Math.max(0, ratio * 100))}%`
+    if (index === 0) label.dataset.align = 'start'
+    else if (index === result.ticks.length - 1) label.dataset.align = 'end'
+    axis.append(label)
+  })
+  nodes.push(axis)
+  return nodes
+}
+
+/** 差异区：三个数字左右并列，中间用 →；标签旁注明差值相对右侧。 */
 function compareDiffNodes(diff: readonly CompareDiffItem[]): HTMLElement[] {
   return diff.map((item) => {
     const row = node('div', 'compare__diff-row')
+    const head = node('div', 'compare__diff-head')
+    head.append(
+      node('span', 'compare__diff-label', item.label),
+      node('span', 'compare__diff-basis', '较右侧')
+    )
+    const pair = node('span', 'compare__diff-pair')
+    pair.append(
+      node('b', undefined, item.current),
+      node('i', 'compare__diff-arrow', '→'),
+      node('b', undefined, item.previous)
+    )
     const delta = node('span', 'compare__diff-delta', formatDelta(item))
     delta.dataset.dir = deltaDirection(item)
-    row.append(node('span', 'compare__diff-label', item.label), delta)
+    row.append(head, pair, delta)
     return row
   })
 }
@@ -2245,23 +2273,24 @@ async function renderCompare(): Promise<void> {
   const [leftDay, rightDay] = await Promise.all([compareDay(left), compareDay(right)])
   if (token !== compareRenderToken || !state.compareOpen) return
   compareResult = compareDays(leftDay, rightDay)
-  ui.compareLeft.replaceChildren(...compareSideNodes(compareResult.left, left, 'left'))
-  ui.compareRight.replaceChildren(...compareSideNodes(compareResult.right, right, 'right'))
+  ui.compareLeft.replaceChildren(...compareDayNodes(compareResult.left, left, 'left'))
+  ui.compareRight.replaceChildren(...compareDayNodes(compareResult.right, right, 'right'))
+  ui.compareChart.replaceChildren(...compareChartNodes(compareResult))
   ui.compareDiff.replaceChildren(...compareDiffNodes(compareResult.diff))
-  paintCompareStrips()
+  paintCompareBands()
 }
 
-function paintCompareStrips(): void {
+function paintCompareBands(): void {
   if (compareResult === null) return
-  for (const strip of ui.compare.querySelectorAll<HTMLElement>('.compare__strip')) {
-    const canvas = strip.querySelector('canvas')
+  for (const band of ui.compareChart.querySelectorAll<HTMLElement>('.compare__band')) {
+    const canvas = band.querySelector('canvas')
     if (!canvas) continue
-    const rect = strip.getBoundingClientRect()
+    const rect = canvas.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) continue
     const ctx = sizeCanvas(canvas, rect.width, rect.height)
     if (!ctx) continue
-    const side = strip.dataset.side === 'left' ? compareResult.left : compareResult.right
-    paintCompareStrip(ctx, side.blocks, rect.width, rect.height)
+    const side = band.dataset.side === 'left' ? compareResult.left : compareResult.right
+    paintCompareStrip(ctx, side.blocks, compareResult.range, rect.width, rect.height)
   }
 }
 
@@ -2912,9 +2941,9 @@ ui.search.value = ''
   ui.compare.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
-    const strip = target.closest<HTMLElement>('.compare__strip')
-    if (!strip || strip.hasAttribute('disabled')) return
-    const date = strip.dataset.date
+    const band = target.closest<HTMLElement>('.compare__band')
+    if (!band || band.hasAttribute('disabled')) return
+    const date = band.dataset.date
     if (!date) return
     closeCompare()
     void selectDay(date)

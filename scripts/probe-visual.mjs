@@ -17,7 +17,7 @@ async function target() {
   for (let i = 0; i < 120; i += 1) {
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()
-      const f = list.find((t) => t.type === 'page' && t.url.startsWith('file:'))
+      const f = list.find((t) => t.type === 'page' && t.url.endsWith('/index.html'))
       if (f) return f
     } catch {}
     await sleep(200)

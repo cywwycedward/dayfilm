@@ -1,22 +1,27 @@
 /**
- * 双日对比的纯参数（R51）：两侧读数与差异列都只由两份 DayRollup 算出。
- * 任一天没有镜头就算空侧：读数是 "—"，差值也是 null，界面据此上色。
+ * 双日对比的纯参数（R51 改版：上下叠片）：两卷胶片共享一条时间轴。
+ * 时间坐标一律用「离当天零点的偏移」，两天才能叠在同一条 00:00–24:00 刻度上。
  */
 import type { DayRollup, Scene } from '../../../shared/types'
 import { exeHue } from './still'
-import { fmtMinutes } from './time'
+import { fmtMinutes, startOfDay } from './time'
 
 export type CompareUnit = 'ms' | 'count' | 'rate'
 
-export interface CompareMetric {
-  label: string
-  value: string
+export interface TimeRange {
+  start: number
+  end: number
 }
 
-/** 素材区间带里的一段：起止都是当天首尾之间的比例 0–1。 */
+export interface AxisTick {
+  at: number
+  label: string
+}
+
+/** 胶片带上的一段镜头：起止是离当天零点的偏移。 */
 export interface CompareBlock {
-  from: number
-  to: number
+  start: number
+  end: number
   hue: number
 }
 
@@ -25,12 +30,9 @@ export interface CompareSide {
   date: string
   empty: boolean
   genre: string
-  note: string
-  /** 三项数字：活跃时长 / 镜头 / 剪辑 */
-  metrics: CompareMetric[]
+  /** 带子左侧 2px 族色条：当天时长第一的进程 */
+  hue: number
   blocks: CompareBlock[]
-  /** 进程前 3 */
-  apps: { exe: string; value: string; hue: number }[]
 }
 
 export interface CompareDiffItem {
@@ -48,26 +50,70 @@ export interface CompareResult {
   left: CompareSide
   right: CompareSide
   diff: CompareDiffItem[]
+  /** 两条带共享的日内偏移范围；两侧都空时为 null */
+  range: TimeRange | null
+  ticks: AxisTick[]
 }
+
+const AXIS_TICKS = 5
 
 function shotsOf(day: DayRollup | null): Scene[] {
   if (day === null) return []
   return day.scenes.filter((scene) => scene.kind === 'shot')
 }
 
-function blocksOf(shots: readonly Scene[]): CompareBlock[] {
-  if (shots.length === 0) return []
-  const start = shots[0].start
-  const end = shots[shots.length - 1].end
-  const span = Math.max(1, end - start)
+/** 当天某时刻 → 离当天零点的毫秒偏移。 */
+function offsetOf(day: DayRollup, ts: number): number {
+  return ts - startOfDay(day.date)
+}
+
+/** 一天的素材区间（首镜开始 → 末镜结束，日内偏移）；没有镜头返回 null。 */
+function shotRange(day: DayRollup | null): TimeRange | null {
+  const shots = shotsOf(day)
+  if (day === null || shots.length === 0) return null
+  const start = offsetOf(day, shots[0].start)
+  const end = offsetOf(day, shots[shots.length - 1].end)
+  return { start, end: Math.max(start + 1, end) }
+}
+
+/** 两条带共享的日内范围：两天的并集；任一侧空用另一侧，都空返回 null。 */
+export function unionRange(a: DayRollup | null, b: DayRollup | null): TimeRange | null {
+  const left = shotRange(a)
+  const right = shotRange(b)
+  if (left === null) return right
+  if (right === null) return left
+  return { start: Math.min(left.start, right.start), end: Math.max(left.end, right.end) }
+}
+
+/** 日内偏移 → HH:MM，不经过 Date，避免时区/夏令时把刻度拉歪。 */
+function clockLabel(offset: number): string {
+  const total = Math.max(0, Math.round(offset / 60_000))
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** 共享时间轴上的 5 个刻度；首尾就是范围两端。 */
+export function axisTicks(range: TimeRange | null): AxisTick[] {
+  if (range === null) return []
+  const span = Math.max(1, range.end - range.start)
+  const ticks: AxisTick[] = []
+  for (let index = 0; index < AXIS_TICKS; index += 1) {
+    const at = Math.round(range.start + (index / (AXIS_TICKS - 1)) * span)
+    ticks.push({ at, label: clockLabel(at) })
+  }
+  return ticks
+}
+
+function blocksOf(day: DayRollup, shots: readonly Scene[]): CompareBlock[] {
   // 与海报同口径：镜头过多时抽样，绘制量可控
   const step = shots.length > 120 ? Math.ceil(shots.length / 120) : 1
   const blocks: CompareBlock[] = []
   for (let index = 0; index < shots.length; index += step) {
     const scene = shots[index]
+    const start = offsetOf(day, scene.start)
+    const end = offsetOf(day, scene.end)
     blocks.push({
-      from: (scene.start - start) / span,
-      to: (scene.end - start) / span,
+      start,
+      end: Math.max(start + 1, end),
       hue: exeHue(scene.exe.length > 0 ? scene.exe : scene.title)
     })
   }
@@ -77,35 +123,18 @@ function blocksOf(shots: readonly Scene[]): CompareBlock[] {
 function sideOf(day: DayRollup | null): CompareSide {
   const shots = shotsOf(day)
   if (day === null || shots.length === 0) {
-    return {
-      date: day?.date ?? '',
-      empty: true,
-      genre: '',
-      note: '',
-      metrics: [
-        { label: '活跃时长', value: '—' },
-        { label: '镜头', value: '—' },
-        { label: '剪辑', value: '—' }
-      ],
-      blocks: [],
-      apps: []
-    }
+    return { date: day?.date ?? '', empty: true, genre: '', hue: 0, blocks: [] }
   }
+  const top = [...day.topApps].sort((a, b) => b.seconds - a.seconds)[0]
+  // 左侧族色条跟着带子里最长的那一镜走，与胶片内容对得上
+  const lead = day.longestShot ?? shots[0]
+  const leadName = lead.exe.length > 0 ? lead.exe : lead.title
   return {
     date: day.date,
     empty: false,
     genre: day.verdict.label,
-    note: day.verdict.note,
-    metrics: [
-      { label: '活跃时长', value: fmtMinutes(day.activeMs) },
-      { label: '镜头', value: String(shots.length) },
-      { label: '剪辑', value: String(day.cuts) }
-    ],
-    blocks: blocksOf(shots),
-    apps: [...day.topApps]
-      .sort((a, b) => b.seconds - a.seconds)
-      .slice(0, 3)
-      .map((app) => ({ exe: app.exe, value: fmtMinutes(app.seconds * 1000), hue: exeHue(app.exe) }))
+    hue: exeHue(leadName.length > 0 ? leadName : (top?.exe ?? '')),
+    blocks: blocksOf(day, shots)
   }
 }
 
@@ -153,7 +182,8 @@ export function compareDays(a: DayRollup | null, b: DayRollup | null): CompareRe
       unit: 'rate'
     }
   ]
-  return { left, right, diff }
+  const range = unionRange(a, b)
+  return { left, right, diff, range, ticks: axisTicks(range) }
 }
 
 /** 差异列的文案：只描述变化，不评价；数值带单位。 */

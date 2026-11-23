@@ -130,7 +130,8 @@ export function paintStillFrame(
   }
 
   if (params.border) {
-    ctx.strokeStyle = 'rgba(236, 231, 220, 0.08)'
+    // 剧照卡片：不画外框，只留 1px 内发丝线（visual-language §8.8）
+    ctx.strokeStyle = 'rgba(236, 231, 220, 0.06)'
     ctx.lineWidth = 1
     ctx.strokeRect(0.5, 0.5, w - 1, h - 1)
   }
@@ -254,23 +255,46 @@ export function paintProjectionBoard(ctx: CanvasRenderingContext2D, params: Proj
   ctx.textAlign = 'left'
 }
 
-/** 放映时遇到空隙：不交一张纯黑画面，写一句空档说明。 */
+/** 放映时遇到空隙：斜纹铺满 + 主文案「空档」+ 一行说明，比纯黑画面更接近日视图的克制处理。 */
 export function paintProjectionGap(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
-  label: string
+  caption: string
 ): void {
   ctx.fillStyle = '#0a0b0d'
   ctx.fillRect(0, 0, width, height)
+
+  // 45° 细斜纹（与中场休息的 hatch 同一套语言，不抢主画面）
+  ctx.save()
+  ctx.beginPath()
+  ctx.rect(0, 0, width, height)
+  ctx.clip()
+  ctx.strokeStyle = 'rgba(141, 147, 158, 0.10)'
+  ctx.lineWidth = 1
+  const spacing = Math.max(6, Math.round(width / 120))
+  for (let offset = -height; offset < width + height; offset += spacing) {
+    ctx.beginPath()
+    ctx.moveTo(offset, height)
+    ctx.lineTo(offset + height, 0)
+    ctx.stroke()
+  }
+  ctx.restore()
+
   ctx.strokeStyle = 'rgba(236, 231, 220, 0.07)'
   ctx.lineWidth = 1
   ctx.strokeRect(0.5, 0.5, width - 1, height - 1)
-  ctx.fillStyle = 'rgba(236, 231, 220, 0.45)'
-  ctx.font = `400 ${Math.max(10, Math.round(width / 60))}px 'Plex Mono', ui-monospace, monospace`
+
+  const main = Math.max(28, Math.round(width / 34))
+  const subtitle = Math.max(12, Math.round(width / 78))
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.fillText(label, Math.round(width / 2), Math.round(height / 2))
+  ctx.font = `400 ${main}px 'Plex Mono', ui-monospace, monospace`
+  ctx.fillStyle = 'rgba(236, 231, 220, 0.55)'
+  ctx.fillText('空档', Math.round(width / 2), Math.round(height / 2 - subtitle * 0.9))
+  ctx.font = `400 ${subtitle}px 'Plex Mono', ui-monospace, monospace`
+  ctx.fillStyle = 'rgba(236, 231, 220, 0.32)'
+  ctx.fillText(caption, Math.round(width / 2), Math.round(height / 2 + subtitle * 1.6))
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
 }

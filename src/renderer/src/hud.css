@@ -65,10 +65,9 @@ body {
   width: 360px;
   height: 148px;
   padding: 12px 16px 12px;
-  border: 1px solid var(--hairline-strong);
-  /* 透明窗上先铺 94% 的墨色，再叠 8% 纸色，透出一点桌面 */
-  background: linear-gradient(rgba(236, 231, 220, 0.08), rgba(236, 231, 220, 0.08)),
-    rgba(10, 11, 13, 0.94);
+  border: 1px solid rgba(236, 231, 220, 0.08);
+  /* §8.6：发丝线 + 5% 底色抬升，不用圆角大框 */
+  background: rgba(20, 22, 28, 0.96);
   -webkit-app-region: drag;
   user-select: none;
   cursor: default;

@@ -34,9 +34,13 @@
         </div>
         <div class="topbar__end">
           <button class="btn" id="exportPoster" type="button" aria-haspopup="menu" aria-expanded="false">导出海报</button>
+          <span class="topbar__sep" aria-hidden="true"></span>
           <button class="btn" id="export" type="button">导出剧本</button>
-          <button class="btn btn--quiet" id="exportPdf" type="button">导出 PDF</button>
-          <button class="btn btn--quiet" id="exportEdl" type="button">导出 EDL</button>
+          <span class="topbar__sep" aria-hidden="true"></span>
+          <button class="btn" id="exportPdf" type="button">导出 PDF</button>
+          <span class="topbar__sep" aria-hidden="true"></span>
+          <button class="btn" id="exportEdl" type="button">导出 EDL</button>
+          <span class="topbar__sep" aria-hidden="true"></span>
           <button class="btn" id="settings" type="button" aria-haspopup="dialog" aria-expanded="false">
             设置
           </button>
@@ -298,9 +302,12 @@
             <button class="btn btn--quiet" id="compareClose" type="button">关闭</button>
           </header>
           <div class="compare">
-            <div class="compare__side" id="compareLeft"></div>
+            <div class="compare__days">
+              <div class="compare__day" id="compareLeft"></div>
+              <div class="compare__day" id="compareRight"></div>
+            </div>
+            <div class="compare__chart" id="compareChart"></div>
             <div class="compare__diff" id="compareDiff"></div>
-            <div class="compare__side" id="compareRight"></div>
           </div>
         </section>
       </div>

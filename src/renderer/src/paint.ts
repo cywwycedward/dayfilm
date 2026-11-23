@@ -159,26 +159,29 @@ export function paintWeekBars(
   })
 }
 
-/** 对比视图的素材区间带：按各自首尾铺满半宽，没有镜头时画点阵。 */
+/** 对比视图的胶片带：两卷共享一条时间轴，按绝对时间投影到 range。 */
 export function paintCompareStrip(
   ctx: CanvasRenderingContext2D,
-  blocks: readonly { from: number; to: number; hue: number }[],
+  blocks: readonly { start: number; end: number; hue: number }[],
+  range: { start: number; end: number } | null,
   width: number,
   height: number
 ): void {
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = '#0a0b0d'
+  ctx.fillStyle = '#101216'
   ctx.fillRect(0, 0, width, height)
-  if (blocks.length === 0) {
+  if (range === null || blocks.length === 0) {
+    // 无采样：点阵，与日视图的“空胶片”同一套语言
     ctx.fillStyle = 'rgba(236, 231, 220, 0.07)'
     for (let x = 6; x < width - 4; x += 12) {
       for (let y = 6; y < height - 5; y += 9) ctx.fillRect(x, y, 1, 1)
     }
     return
   }
+  const span = Math.max(1, range.end - range.start)
   for (const block of blocks) {
-    const x = block.from * width
-    const w = Math.max(1.5, (block.to - block.from) * width)
+    const x = ((block.start - range.start) / span) * width
+    const w = Math.max(1.5, ((block.end - block.start) / span) * width)
     ctx.fillStyle = familyColor(block.hue, 0.85)
     ctx.fillRect(x, 0, w, height)
   }
