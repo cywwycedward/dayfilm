@@ -3188,6 +3188,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .spine {
   position: relative;
+  z-index: 2;
   display: grid;
   grid-template-rows: 14px minmax(0, 1fr) 14px;
   gap: var(--s1);
@@ -3245,6 +3246,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .spine__canvas {
   position: absolute;
+  z-index: 3;
   top: 18px;
   left: 0;
   pointer-events: none;
@@ -3278,7 +3280,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   display: flex;
   flex: none;
   flex-direction: column;
-  gap: var(--s3);
+  gap: var(--s2);
   padding: var(--s4);
   border: 1px solid var(--panel-line);
   background: var(--panel);
@@ -3287,7 +3289,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .rail__block--grow {
   flex: 1 1 auto;
   min-height: 120px;
-  padding-bottom: 12px;
+  padding-bottom: 0;
 }
 
 .rail__head {
@@ -3407,6 +3409,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: 0 0 auto;
   min-height: 80px;
   padding-right: var(--s2);
+  padding-bottom: 12px;
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -3551,4 +3554,263 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     grid-row: 1 / 3;
     min-height: 400px;
   }
+}
+
+/* ==========================================================================
+   v2.1 无边框头部 / 自绘下拉 / 输入三态 / 字号规范
+   ========================================================================== */
+
+/* A. 头部：整条可拖动，控件与按钮 no-drag --------------------------- */
+
+.topbar {
+  height: 56px;
+  padding: 0 var(--s4) 0 var(--s5);
+  gap: var(--s3);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.brand {
+  letter-spacing: 0.08em;
+  font-size: 20px;
+  color: var(--paper);
+}
+
+.topbar__date,
+.topbar__search,
+.chip,
+.topbar__end,
+.winbtns,
+.topbar .btn,
+.topbar .select {
+  -webkit-app-region: no-drag;
+}
+
+/* 中间拖动区：占满剩余宽度，双击切换最大化 */
+.topbar__drag {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 24px;
+  -webkit-app-region: drag;
+}
+
+.topbar__date .select__trigger {
+  font-size: 13px;
+  height: 32px;
+}
+
+.winbtns {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: var(--s2);
+}
+
+.winbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+  transition: background 120ms var(--ease), color 120ms var(--ease);
+}
+
+.winbtn svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: square;
+}
+
+.winbtn:hover {
+  background: rgba(236, 231, 220, 0.06);
+  color: var(--paper);
+}
+
+.winbtn--close:hover {
+  background: var(--red);
+  color: var(--ink);
+}
+
+/* B. 自绘下拉框 ------------------------------------------------------ */
+
+.select {
+  position: relative;
+  display: inline-block;
+  min-width: 0;
+}
+
+.select__trigger {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  height: 32px;
+  padding: 0 0 0 12px;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0;
+  background: transparent;
+  color: var(--paper);
+  font: 400 13px/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 120ms var(--ease);
+}
+
+.select__trigger:hover {
+  border-bottom-color: rgba(236, 231, 220, 0.3);
+}
+
+/* 触发条自己不要全局 2px 矩形焦点环；键盘操作且未展开时才给 */
+.select__trigger:focus-visible {
+  outline: none;
+}
+
+.select[data-input='keyboard'] .select__trigger:focus-visible:not([aria-expanded='true']) {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.select__trigger[aria-expanded='true'] {
+  border-bottom-color: var(--amber);
+}
+
+.select__value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select__chevron {
+  flex: none;
+  width: 8px;
+  height: 5px;
+  margin-left: 8px;
+  color: var(--paper-dim);
+  transition: transform 120ms var(--ease);
+}
+
+.select__trigger[aria-expanded='true'] .select__chevron {
+  transform: rotate(180deg);
+  color: var(--amber);
+}
+
+.select__panel {
+  position: fixed;
+  z-index: 40;
+  min-width: 240px;
+  max-height: 260px;
+  padding: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--panel-line);
+  border-radius: 2px;
+  background: var(--lift);
+  box-shadow: var(--panel-shadow);
+}
+
+.select__panel[hidden] {
+  display: none;
+}
+
+.select__option {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 8px;
+  overflow: hidden;
+  border-left: 2px solid transparent;
+  color: var(--paper-dim);
+  font: 400 13px/1 var(--font-ui);
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 100ms var(--ease), color 100ms var(--ease);
+}
+
+.select__option.is-selected {
+  border-left-color: var(--amber);
+  background: rgba(236, 231, 220, 0.04);
+  color: var(--paper);
+}
+
+.select__option.is-active {
+  background: rgba(236, 231, 220, 0.04);
+  color: var(--paper);
+}
+
+.select--compare,
+.select--compare .select__trigger {
+  width: 100%;
+}
+
+/* 对比浮层里日期行改成自绘下拉后的间距 */
+.compare__day .select {
+  min-width: 0;
+  width: 100%;
+}
+
+/* C. 输入框三态 ------------------------------------------------------ */
+
+input[type='search'],
+input[type='text'],
+textarea {
+  height: 32px;
+  padding: 0 0 0 12px;
+  border-bottom-color: rgba(255, 255, 255, 0.16);
+  caret-color: var(--amber);
+  transition: border-color 120ms var(--ease), box-shadow 120ms var(--ease),
+    color 120ms var(--ease);
+}
+
+input[type='search']:focus-visible,
+input[type='text']:focus-visible,
+textarea:focus-visible {
+  border-bottom-color: var(--amber);
+  box-shadow: 0 1px 0 rgba(232, 180, 90, 0.2);
+}
+
+::placeholder {
+  color: #8e8a80;
+  opacity: 0.56;
+}
+
+input.input--error,
+input.input--error:focus-visible,
+textarea.input--error,
+textarea.input--error:focus-visible {
+  border-bottom-color: #e06c6c;
+  color: #e06c6c;
+  box-shadow: none;
+}
+
+/* 手记是一行输入，保留底线与聚焦微光 */
+.hero__note .note__input {
+  padding-left: 12px;
+}
+
+/* D. 字号规范：按钮与次要文字按 13 / 11 / 10 阶梯 ---------------- */
+
+.btn {
+  font-size: 13px;
+}
+
+.chip,
+.hero__metric dt,
+.rail__head span,
+.stats__line,
+.recent__cols,
+.field__label,
+.metric__label,
+.hero__window-label {
+  font-variant-numeric: tabular-nums;
 }

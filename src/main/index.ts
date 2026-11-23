@@ -14,14 +14,18 @@ import { createHud, hudPagePath, type HudHandle } from './hud'
 import { createIngest, type IngestResult } from './ingest'
 import {
   GUARDED_CHANNELS,
+  MAXIMIZED_CHANGED_CHANNEL,
   PROJECTION_TOGGLE_CHANNEL,
   SEND_CHANNELS,
+  WINDOW_CHANNELS,
   createHandlers,
   createSendHandlers,
+  createWindowHandlers,
   parseDayRequest,
   type GuardedChannel,
   type GuardedHandler,
-  type SendChannel
+  type SendChannel,
+  type WindowChannel
 } from './ipc'
 import { NotesStore } from './notes'
 import { buildScriptHtml } from './pdf'
@@ -38,6 +42,7 @@ import { registerShortcuts, type ShortcutResult } from './shortcuts'
 import { DayStore, localDate } from './store'
 import { WriteBuffer } from './store/buffer'
 import { createTray, type TrayHandle } from './tray'
+import { bindMaximizeEvents, createWindowActions } from './window-chrome'
 import type { TrayState } from './tray/tooltip'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
@@ -66,6 +71,9 @@ let mainWindow: BrowserWindow | null = null
 let tickTimer: NodeJS.Timeout | null = null
 let isQuitting = false
 let status = { capturing: false, error: null as string | null }
+
+/** 无边框窗口的三个按钮：目标是主窗口；窗口不存在（例如退出中）时静默忽略。 */
+const windowActions = createWindowActions(() => (mainWindow && !mainWindow.isDestroyed() ? mainWindow : null))
 let writeError: string | null = null
 let sizeWarning: string | null = null
 let retentionError: string | null = null
@@ -274,7 +282,7 @@ function isTrustedSender(event: { sender: Electron.WebContents; senderFrame: Ele
   )
 }
 
-function handleIpc(channel: GuardedChannel, handler: GuardedHandler): void {
+function handleIpc(channel: GuardedChannel | WindowChannel, handler: GuardedHandler): void {
   ipcMain.handle(channel, (event, ...args: unknown[]) => {
     if (!isTrustedSender(event)) {
       // 只记通道名，不记参数：参数里可能有窗口标题。
@@ -334,6 +342,10 @@ function registerIpc(): void {
 
   const sendHandlers = createSendHandlers({ hudOpen: () => showWindow() })
   for (const channel of Object.values(SEND_CHANNELS)) listenIpc(channel, sendHandlers[channel])
+
+  // 无边框窗口的三个按钮：同样过来源守卫
+  const windowHandlers = createWindowHandlers(windowActions)
+  for (const channel of Object.values(WINDOW_CHANNELS)) handleIpc(channel, windowHandlers[channel])
 }
 
 /** 应用设置变更的副作用：暂停/继续采集、同步启动项、立即清理过期数据、HUD 显隐。 */
@@ -409,8 +421,13 @@ function createWindow(): void {
     height: 820,
     minWidth: 960,
     minHeight: 640,
+    // 无边框：标题栏与窗口按钮由界面自绘（v2.1）。thickFrame 保证拖边缘仍能缩放，
+    // roundedCorners 让 Win11 的圆角生效；背景色与界面一致，避免启动白闪。
+    frame: false,
+    thickFrame: true,
+    roundedCorners: true,
     show: false,
-    backgroundColor: '#08090c',
+    backgroundColor: '#0a0b0d',
     title: 'Dayfilm',
     autoHideMenuBar: true,
     webPreferences: {
@@ -421,6 +438,11 @@ function createWindow(): void {
     }
   })
   mainWindow = win
+
+  // 最大化状态变化 → 界面换按钮图标
+  const unbindMaximize = bindMaximizeEvents(win, (maximized) => {
+    if (!win.isDestroyed()) win.webContents.send(MAXIMIZED_CHANGED_CHANNEL, maximized)
+  })
 
   win.once('ready-to-show', () => {
     if (!startedHidden() || forceShowWindow) win.show()
@@ -440,6 +462,7 @@ function createWindow(): void {
   })
 
   win.on('closed', () => {
+    unbindMaximize()
     if (mainWindow === win) mainWindow = null
   })
 

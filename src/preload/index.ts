@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { IPC, type DayfilmApi, type ProjectionBridge } from '../shared/ipc'
 import type { LiveState } from '../shared/types'
-import { HUD_OPEN_CHANNEL, PROJECTION_TOGGLE_CHANNEL } from '../main/ipc'
+import { HUD_OPEN_CHANNEL, MAXIMIZED_CHANGED_CHANNEL, PROJECTION_TOGGLE_CHANNEL, WINDOW_CHANNELS } from '../main/ipc'
 
 const api: DayfilmApi = {
   getDay: (date) => ipcRenderer.invoke(IPC.getDay, date),
@@ -50,3 +50,26 @@ contextBridge.exposeInMainWorld('dayfilmProjection', {
     return () => ipcRenderer.removeListener(PROJECTION_TOGGLE_CHANNEL, handler)
   }
 } satisfies ProjectionBridge)
+
+/**
+ * 无边框窗口的窗口按钮（v2.1）。与 `dayfilmProjection` 一样是独立 bridge：
+ * 契约里还没有窗口控制方法，先在这里暴露；返回切换后的最大化状态。
+ */
+export interface WindowBridge {
+  minimize(): Promise<void>
+  toggleMaximize(): Promise<{ maximized: boolean }>
+  /** 与点系统关闭相同：收进托盘，不退出应用 */
+  close(): Promise<void>
+  onMaximizeChange(cb: (maximized: boolean) => void): () => void
+}
+
+contextBridge.exposeInMainWorld('dayfilmWindow', {
+  minimize: () => ipcRenderer.invoke(WINDOW_CHANNELS.minimize),
+  toggleMaximize: () => ipcRenderer.invoke(WINDOW_CHANNELS.toggleMaximize),
+  close: () => ipcRenderer.invoke(WINDOW_CHANNELS.close),
+  onMaximizeChange: (cb) => {
+    const handler = (_event: unknown, maximized: boolean): void => cb(Boolean(maximized))
+    ipcRenderer.on(MAXIMIZED_CHANGED_CHANNEL, handler)
+    return () => ipcRenderer.removeListener(MAXIMIZED_CHANGED_CHANNEL, handler)
+  }
+} satisfies WindowBridge)

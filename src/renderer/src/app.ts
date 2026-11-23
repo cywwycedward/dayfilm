@@ -7,6 +7,7 @@ import {
   type Settings
 } from '../../shared/settings'
 import { createSource, type DayfilmSource } from './data'
+import { createSelect, type SelectHandle } from './select'
 import { sceneAt } from './lib/reel'
 import { pickHighlights } from './lib/highlights'
 import { computePoster, type PosterTheme } from './lib/poster'
@@ -141,7 +142,7 @@ interface State {
 }
 
 interface Ui {
-  date: HTMLSelectElement
+  date: HTMLElement
   search: HTMLInputElement
   chip: HTMLElement
   chipText: HTMLElement
@@ -199,7 +200,7 @@ interface Ui {
   panel: HTMLElement
   panelClose: HTMLButtonElement
   panelStatus: HTMLElement
-  retention: HTMLSelectElement
+  retention: HTMLElement
   termChips: HTMLElement
   termForm: HTMLFormElement
   termInput: HTMLInputElement
@@ -256,6 +257,12 @@ interface Ui {
   weekEvidence: HTMLElement
   weekEvidenceBody: HTMLElement
   weekPicks: HTMLElement
+  winMin: HTMLButtonElement
+  winMax: HTMLButtonElement
+  winClose: HTMLButtonElement
+  winMaxIcon: SVGElement
+  winRestoreIcon: SVGElement
+  dragRegion: HTMLElement
 }
 
 let state!: State
@@ -278,6 +285,19 @@ let projectionLast = 0
 let projectionCutsText = ''
 let compareResult: CompareResult | null = null
 let compareRenderToken = 0
+let dateSelect: SelectHandle | null = null
+let retentionSelect: SelectHandle | null = null
+let windowMaximized = false
+
+/** 主进程并行改无边框窗口；未就绪时全部可选调用。 */
+interface WindowBridge {
+  minimize?(): void
+  toggleMaximize?(): void
+  close?(): void
+  onMaximizeChange?(cb: (maximized: boolean) => void): () => void
+}
+// SAFETY: 主进程并行改窗口，bridge 可能缺席或落后于渲染进程；这里只按可选成员调用
+const windowBridge = (window as unknown as { dayfilmWindow?: WindowBridge }).dayfilmWindow
 const projectorAudio = createProjectorAudio()
 
 function dayStart(): number {
@@ -325,7 +345,7 @@ function collect(root: HTMLElement): Ui {
     return found
   }
   return {
-    date: pick<HTMLSelectElement>('date'),
+    date: pick<HTMLElement>('date'),
     search: pick<HTMLInputElement>('search'),
     chip: pick<HTMLElement>('chip'),
     chipText: pick<HTMLElement>('chipText'),
@@ -383,7 +403,7 @@ function collect(root: HTMLElement): Ui {
     panel: pick<HTMLElement>('panel'),
     panelClose: pick<HTMLButtonElement>('panelClose'),
     panelStatus: pick<HTMLElement>('panelStatus'),
-    retention: pick<HTMLSelectElement>('settingRetention'),
+    retention: pick<HTMLElement>('settingRetention'),
     termChips: pick<HTMLElement>('termChips'),
     termForm: pick<HTMLFormElement>('termForm'),
     termInput: pick<HTMLInputElement>('termInput'),
@@ -439,22 +459,24 @@ function collect(root: HTMLElement): Ui {
     weekVerdict: pick<HTMLElement>('weekVerdict'),
     weekEvidence: pick<HTMLElement>('weekEvidence'),
     weekEvidenceBody: pick<HTMLElement>('weekEvidenceBody'),
-    weekPicks: pick<HTMLElement>('weekPicks')
+    weekPicks: pick<HTMLElement>('weekPicks'),
+    winMin: pick<HTMLButtonElement>('winMin'),
+    winMax: pick<HTMLButtonElement>('winMax'),
+    winClose: pick<HTMLButtonElement>('winClose'),
+    winMaxIcon: pick<SVGElement>('winMaxIcon'),
+    winRestoreIcon: pick<SVGElement>('winRestoreIcon'),
+    dragRegion: pick<HTMLElement>('dragRegion')
   }
 }
 
 function renderDates(): void {
   const today = isoDate(Date.now())
   // 今天可能还没有日文件：即使主进程没返回今天，也要让下拉框里有
-const dates = state.dates.includes(state.date) ? state.dates : [state.date, ...state.dates]
-  ui.date.replaceChildren(
-    ...dates.map((date) => {
-      const option = node('option', undefined, fmtDateLabel(date, today))
-      option.value = date
-      return option
-    })
+  const dates = state.dates.includes(state.date) ? state.dates : [state.date, ...state.dates]
+  dateSelect?.setOptions(
+    dates.map((date) => ({ value: date, label: fmtDateLabel(date, today) })),
+    state.date
   )
-  ui.date.value = state.date
 }
 
 /** 重新拉一次日期列表（跨零点、保留期变更后）。失败时保留旧列表*/
@@ -534,9 +556,9 @@ function fitRecentList(): void {
   const rawChrome = block.getBoundingClientRect().height - ui.listScroll.getBoundingClientRect().height
   const chrome = rawChrome > 0 && rawChrome < 160 ? rawChrome : 100
   const room = Math.max(0, railH - others - 32 - chrome)
-  const rows = Math.max(RECENT_MIN_ROWS, Math.floor(room / rowStride))
-  // 视口高度就是整行高度：12px 内边距由块自身的 padding-bottom 提供，不会露出半行
-  const target = rows * rowStride
+  const rows = Math.max(RECENT_MIN_ROWS, Math.floor((room - 12) / rowStride))
+  // 可用高度装得下整行就整行；装不下时容器就取可用高度，超出滚动（不低于 4 行）
+  const target = Math.min(rows * rowStride + 12, Math.max(4 * rowStride, room))
   if (Math.abs(ui.listScroll.getBoundingClientRect().height - target) > 0.5) {
     ui.listScroll.style.height = `${target}px`
   }
@@ -565,9 +587,11 @@ function dayOrdinals(): ReadonlyMap<string, number> {
 function paintSpineCanvas(): void {
   const canvas = ui.spineCanvas
   const viewport = ui.spineScroll
-  const width = viewport.clientWidth
+  const spineWidth = viewport.clientWidth
+  // 画布比脊柱宽 96px：右侧留出「现在」标签的位置
+  const width = spineWidth + 96
   const height = viewport.clientHeight
-  if (width <= 0 || height <= 0) return
+  if (spineWidth <= 0 || height <= 0) return
   const ctx = sizeCanvas(canvas, width, height)
   if (!ctx) return
   canvas.style.width = `${width}px`
@@ -575,7 +599,7 @@ function paintSpineCanvas(): void {
   const scrollTop = viewport.scrollTop
   const range = visibleSpineFrames(scrollTop, height)
   const offset = ((state.playhead - dayStart()) / SPINE_FRAME_MS) * SPINE_FRAME_H - scrollTop
-  paintSpine(ctx, spineFrameData(), range, scrollTop, SPINE_FRAME_H, width, height, {
+  paintSpine(ctx, spineFrameData(), range, scrollTop, SPINE_FRAME_H, spineWidth, width, height, {
     y: offset,
     label: isToday() ? `现在 ${fmtClock(state.playhead)}` : fmtClock(state.playhead)
   }, {
@@ -1416,21 +1440,14 @@ function setPanelStatus(text: string, kind: 'idle' | 'ok' | 'error'): void {
   }
 }
 
-/** 保留期选项与内置脱敏词都是合同里给的常量，这里只渲染一次*/
+/** 内置脱敏词是合同里给的常量，这里只渲染一次 */
 function renderSettingsStatic(): void {
-  ui.retention.replaceChildren(
-    ...RETENTION_OPTIONS.map((option) => {
-      const item = node('option', undefined, option.label)
-      item.value = String(option.value)
-      return item
-    })
-  )
   ui.builtinTerms.textContent = BUILTIN_REDACT_TERMS.join(' · ')
 }
 
 function renderSettings(): void {
   const settings = state.settings
-  ui.retention.value = String(settings.retentionDays)
+  retentionSelect?.setValue(String(settings.retentionDays))
   ui.autoStart.checked = settings.autoStart
   ui.pausedToggle.checked = settings.paused
   ui.hudToggle.checked = settings.hud.visible
@@ -1538,7 +1555,7 @@ function openPanel(): void {
   ui.drawer.hidden = false
   ui.settingsBtn.setAttribute('aria-expanded', 'true')
   renderSettings()
-  ui.retention.focus()
+  retentionSelect?.focus()
   void loadSettings()
 }
 
@@ -1575,13 +1592,28 @@ async function quitApp(): Promise<void> {
   }
 }
 
+function setInputError(
+  input: HTMLInputElement | HTMLTextAreaElement,
+  message: string | null
+): void {
+  input.classList.toggle('input--error', message !== null)
+  if (message === null) input.removeAttribute('aria-invalid')
+  else input.setAttribute('aria-invalid', 'true')
+}
+
 async function addTerm(): Promise<void> {
   const term = ui.termInput.value.trim()
-  if (term.length === 0) return
+  if (term.length === 0) {
+    setInputError(ui.termInput, '请输入关键词')
+    setPanelStatus('关键词不能为空', 'error')
+    return
+  }
   if (state.settings.redactTerms.includes(term)) {
+    setInputError(ui.termInput, '关键词重复')
     setPanelStatus('这个关键词已经在列表里', 'error')
     return
   }
+  setInputError(ui.termInput, null)
   const saved = await applySettings({ redactTerms: [...state.settings.redactTerms, term] })
   if (saved) ui.termInput.value = ''
 }
@@ -1871,7 +1903,7 @@ async function openCompare(): Promise<void> {
   }
   await renderCompare()
   // 浮层打开后焦点进到左侧日期，Tab 不出浮层
-  ui.compareLeft.querySelector<HTMLSelectElement>('select')?.focus({ preventScroll: true })
+  ui.compareLeft.querySelector<HTMLElement>('.select__trigger')?.focus({ preventScroll: true })
 }
 
 function closeCompare(): void {
@@ -1883,20 +1915,20 @@ function closeCompare(): void {
 
 function compareDayNodes(side: CompareSide, date: string, which: 'left' | 'right'): HTMLElement[] {
   const today = isoDate(Date.now())
-  const select = node('select', 'compare__date')
-  select.dataset.side = which
-  select.setAttribute('aria-label', which === 'left' ? '左侧日期' : '右侧日期')
   const dates = state.dates.includes(date) ? state.dates : [date, ...state.dates]
-  select.replaceChildren(
-    ...dates.map((item) => {
-      const option = node('option', undefined, fmtDateLabel(item, today))
-      option.value = item
-      return option
-    })
-  )
-  select.value = date
+  const select = createSelect({
+    label: which === 'left' ? '左侧日期' : '右侧日期',
+    className: 'select--compare',
+    options: dates.map((item) => ({ value: item, label: fmtDateLabel(item, today) })),
+    value: date,
+    onChange: (value) => {
+      state.compareDates = { ...state.compareDates, [which]: value }
+      void renderCompare()
+    }
+  })
+  select.element.dataset.side = which
   return [
-    select,
+    select.element,
     node(
       'span',
       side.empty ? 'compare__genre compare__genre--empty' : 'compare__genre',
@@ -2159,17 +2191,22 @@ async function addProject(): Promise<void> {
   const name = ui.projectName.value.trim()
   const terms = splitTerms(ui.projectTerms.value)
   if (name.length === 0) {
+    setInputError(ui.projectName, '项目名不能为空')
     setPanelStatus('项目名不能为空', 'error')
     return
   }
   if (terms.length === 0) {
+    setInputError(ui.projectTerms, '至少填一个关键词')
     setPanelStatus('至少填一个关键词', 'error')
     return
   }
   if (state.settings.projects.some((rule) => rule.name === name)) {
+    setInputError(ui.projectName, '同名项目已存在')
     setPanelStatus('已经有同名项目', 'error')
     return
   }
+  setInputError(ui.projectName, null)
+  setInputError(ui.projectTerms, null)
   const saved = await applySettings({ projects: [...state.settings.projects, { name, terms }] })
   if (saved) {
     ui.projectName.value = ''
@@ -2478,15 +2515,22 @@ function refreshWeekIfVisible(): void {
   if (state.weekFilm !== null) refreshWeekFilm()
 }
 
+function applyWindowMaximized(maximized: boolean): void {
+  windowMaximized = maximized
+  ui.winMaxIcon.toggleAttribute('hidden', maximized)
+  ui.winRestoreIcon.toggleAttribute('hidden', !maximized)
+  ui.winMax.dataset.state = windowMaximized ? 'maximized' : 'normal'
+  ui.winMax.setAttribute('aria-label', maximized ? '还原窗口' : '最大化')
+}
+
 function bindEvents(): void {
-  ui.date.addEventListener('change', () => {
-    // 换日期就是看那一天，先退出检
-ui.search.value = ''
-    state.results = null
-    resetListScroll()
-    void loadDate(ui.date.value)
-  })
   ui.search.addEventListener('input', scheduleSearch)
+  // 无边框窗口按钮（主进程未就绪时忽略）
+  ui.winMin.addEventListener('click', () => windowBridge?.minimize?.())
+  ui.winMax.addEventListener('click', () => windowBridge?.toggleMaximize?.())
+  ui.winClose.addEventListener('click', () => windowBridge?.close?.())
+  ui.dragRegion.addEventListener('dblclick', () => windowBridge?.toggleMaximize?.())
+  applyWindowMaximized(false)
   // 顶栏菜单：导出（脚本/PDF/EDL/海报三主题）与「···」（对比/日历）
   ui.exportMenuBtn.addEventListener('click', () => toggleMenu(ui.exportMenu, ui.exportMenuBtn))
   ui.moreMenuBtn.addEventListener('click', () => toggleMenu(ui.moreMenu, ui.moreMenuBtn))
@@ -2550,13 +2594,13 @@ ui.search.value = ''
   ui.drawerScrim.addEventListener('click', closePanel)
   ui.panelClose.addEventListener('click', closePanel)
   document.addEventListener('keydown', onPanelKey)
-  ui.retention.addEventListener('change', () => {
-    void applySettings({ retentionDays: Number(ui.retention.value) })
-  })
   ui.termForm.addEventListener('submit', (event) => {
     event.preventDefault()
     void addTerm()
   })
+  for (const input of [ui.termInput, ui.projectName, ui.projectTerms]) {
+    input.addEventListener('input', () => setInputError(input, null))
+  }
   ui.termChips.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
@@ -2771,6 +2815,30 @@ export async function boot(): Promise<void> {
   state.playhead = initialPlayhead()
 
   ui.spineSpacer.style.height = `${spineHeight()}px`
+  // 自绘下拉框：日期与保留期（替换原生 select）
+  dateSelect = createSelect({
+    label: '日期',
+    options: [],
+    value: state.date,
+    onChange: (value) => {
+      ui.search.value = ''
+      state.results = null
+      resetListScroll()
+      void loadDate(value)
+    }
+  })
+  ui.date.replaceChildren(dateSelect.element)
+  retentionSelect = createSelect({
+    label: '保留期',
+    options: RETENTION_OPTIONS.map((option) => ({ value: String(option.value), label: option.label })),
+    value: String(state.settings.retentionDays),
+    onChange: (value) => {
+      void applySettings({ retentionDays: Number(value) })
+    }
+  })
+  ui.retention.replaceChildren(retentionSelect.element)
+  // 最大化状态由主进程推送；桥接缺席时忽略
+  windowBridge?.onMaximizeChange?.((maximized) => applyWindowMaximized(maximized))
   renderDates()
   renderSettingsStatic()
   renderSettings()

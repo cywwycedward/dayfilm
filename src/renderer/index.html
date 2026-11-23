@@ -11,14 +11,13 @@
   </head>
   <body>
     <div id="app">
-      <header class="topbar">
+      <header class="topbar" id="topbar">
         <h1 class="brand">DAYFILM</h1>
-        <label class="topbar__date">
-          <select id="date" aria-label="日期"></select>
-        </label>
+        <div class="topbar__date" id="date"></div>
         <span class="chip" id="chip" data-state="ok"
           ><i class="chip__dot"></i><span id="chipText">实时记录中</span></span
         >
+        <div class="topbar__drag" id="dragRegion" aria-hidden="true"></div>
         <label class="topbar__search">
           <input
             id="search"
@@ -26,6 +25,7 @@
             placeholder="搜索镜头、应用、标题…"
             autocomplete="off"
             spellcheck="false"
+            aria-label="搜索镜头、应用、标题"
           />
         </label>
         <div class="topbar__end">
@@ -51,6 +51,29 @@
           >
             ···
           </button>
+          <div class="winbtns" role="group" aria-label="窗口">
+            <button class="winbtn" id="winMin" type="button" aria-label="最小化">
+              <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6" /></svg>
+            </button>
+            <button class="winbtn" id="winMax" type="button" aria-label="最大化">
+              <svg class="winbtn__max" id="winMaxIcon" viewBox="0 0 10 10" aria-hidden="true">
+                <rect x="2" y="2" width="6" height="6" />
+              </svg>
+              <svg
+                class="winbtn__restore"
+                id="winRestoreIcon"
+                viewBox="0 0 10 10"
+                aria-hidden="true"
+                hidden
+              >
+                <path d="M2 2h5v5" />
+                <rect x="3.5" y="3.5" width="5" height="5" />
+              </svg>
+            </button>
+            <button class="winbtn winbtn--close" id="winClose" type="button" aria-label="关闭">
+              <svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" /></svg>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -266,7 +289,7 @@
           <div class="panel__body">
             <section class="fieldset">
               <h3>保留期</h3>
-              <select id="settingRetention"></select>
+              <div class="fieldset__select" id="settingRetention"></div>
               <p class="hint">启动时清理超出保留期的日文件，界面的日期列表只列出保留期内的日期。</p>
             </section>
 

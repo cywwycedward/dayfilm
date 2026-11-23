@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   GUARDED_CHANNELS,
   HUD_OPEN_CHANNEL,
+  MAXIMIZED_CHANGED_CHANNEL,
   OUTBOUND_CHANNELS,
   PROJECTION_TOGGLE_CHANNEL,
   SEND_CHANNELS,
+  WINDOW_CHANNELS,
   createHandlers,
   createSendHandlers,
   parseDayRequest,
@@ -164,11 +166,31 @@ describe('单向 send 通道', () => {
 })
 
 describe('主进程 → 渲染进程通道', () => {
-  it('放映切换通道登记在案，且不与其它通道撞名', () => {
+  it('出站通道登记在案，且不与其它通道撞名', () => {
     const outbound = Object.values(OUTBOUND_CHANNELS)
-    expect(outbound).toEqual([PROJECTION_TOGGLE_CHANNEL])
-    const inUse = [...Object.values(GUARDED_CHANNELS), ...Object.values(SEND_CHANNELS), IPC.tick] as string[]
+    expect(outbound).toEqual([PROJECTION_TOGGLE_CHANNEL, MAXIMIZED_CHANGED_CHANNEL])
+    const inUse = [
+      ...Object.values(GUARDED_CHANNELS),
+      ...Object.values(SEND_CHANNELS),
+      ...Object.values(WINDOW_CHANNELS),
+      IPC.tick
+    ] as string[]
     expect(outbound.filter((channel) => inUse.includes(channel))).toEqual([])
     for (const channel of outbound) expect(channel.startsWith('dayfilm:')).toBe(true)
+  })
+})
+
+describe('无边框窗口通道', () => {
+  it('三个窗口按钮通道登记在案，不与其它通道撞名', () => {
+    const window = Object.values(WINDOW_CHANNELS)
+    expect([...window].sort()).toEqual(['window:close', 'window:minimize', 'window:toggle-maximize'])
+    const inUse = [
+      ...Object.values(GUARDED_CHANNELS),
+      ...Object.values(SEND_CHANNELS),
+      ...Object.values(OUTBOUND_CHANNELS),
+      IPC.tick
+    ] as string[]
+    expect(window.filter((channel) => inUse.includes(channel))).toEqual([])
+    expect(new Set(window).size).toBe(window.length)
   })
 })

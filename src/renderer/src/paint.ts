@@ -152,22 +152,25 @@ export function paintSpine(
   range: { start: number; end: number },
   scrollTop: number,
   frameH: number,
+  spineWidth: number,
   width: number,
   height: number,
   now: { y: number; label: string } | null,
   options: SpinePaintOptions
 ): void {
-  // 88px 宽：胶片 60（含左右 2px 族色边）+ 齿孔 4 + 密度柱 24
+  // 胶片 60（含左右 2px 族色边）+ 齿孔 2 + 密度柱 24 = 88；标签画在 88 之外
   const filmW = 60
   const sprocketX = filmW
   const sprocketW = 2
   const densityX = filmW + sprocketW + 2
   const subW = 2
   const subGap = 2
+  const densityEnd = Math.min(spineWidth, densityX + 6 * (subW + subGap))
 
   ctx.clearRect(0, 0, width, height)
+  // 只给脊柱本身铺墨色；画布多出来的 96px 留给「现在」标签，保持透明
   ctx.fillStyle = '#0a0b0d'
-  ctx.fillRect(0, 0, width, height)
+  ctx.fillRect(0, 0, spineWidth, height)
 
   for (let index = range.start; index < range.end; index += 1) {
     const frame = frames[index]
@@ -224,23 +227,25 @@ export function paintSpine(
     })
 
     ctx.fillStyle = 'rgba(236, 231, 220, 0.05)'
-    ctx.fillRect(0, y + frameH - 1, width, 1)
+    ctx.fillRect(0, y + frameH - 1, spineWidth, 1)
   }
 
-  // 现在：2px 琥珀横线 + 右侧 「现在 HH:MM」
+  // 现在：2px 琥珀横线（只跨脊柱）+ 右侧（密度柱之外 +6px）的标签
   if (now !== null) {
     const y = Math.round(now.y)
     if (y >= -1 && y <= height + 1) {
       ctx.fillStyle = 'rgba(232, 180, 90, 0.95)'
-      ctx.fillRect(0, y, width, 2)
+      ctx.fillRect(0, y, spineWidth, 2)
       ctx.font = "400 10px 'Plex Mono', ui-monospace, monospace"
-      ctx.textAlign = 'right'
+      ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
       const textW = ctx.measureText(now.label).width
-      ctx.fillStyle = 'rgba(10, 11, 13, 0.92)'
-      ctx.fillRect(width - textW - 6, y - 14, textW + 6, 13)
+      const labelX = densityEnd + 6
+      // 40% 墨色底，避免与帧内应用名叠字
+      ctx.fillStyle = 'rgba(10, 11, 13, 0.4)'
+      ctx.fillRect(labelX - 3, y - 14, Math.min(textW + 6, width - labelX + 3), 13)
       ctx.fillStyle = 'rgba(232, 180, 90, 0.95)'
-      ctx.fillText(now.label, width - 3, y - 8)
+      ctx.fillText(now.label, labelX, y - 8)
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
     }

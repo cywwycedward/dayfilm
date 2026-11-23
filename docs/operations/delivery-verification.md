@@ -136,6 +136,21 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 
 累计：`npm run typecheck` exit=0，`npm test` 41 文件 / 572 例通过，`npm run build` 通过。
 
+## v2.1 无边框窗体与控件细节
+
+用户反馈"Electron 的窗口边框太丑"和"下拉框/字体细节粗糙"。先由 ChatGPT 出细节规范图（`docs/product/ui-concept-v3-chrome.png`，A–D 四块），再按图实现。
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 无边框窗体 | 通过 | `frame: false` + `thickFrame` + `roundedCorners`；窗口 screenshot 里已经没有系统标题栏，顶部就是自绘 56px 头部 |
+| 窗口按钮 | 通过 | 最小化 / 最大化 / 关闭（含还原态）三个 32×32 按钮走 IPC；实测最大化到 1936×1048、还原回 1280×820；点关闭后 electron 仍有 5 个进程、可见窗口 0 个（收进托盘，不退出） |
+| 自绘下拉框 | 通过 | 日期、保留期、对比与日历的日期全部换成自绘 listbox：240×260 面板、32px 行高、选中行 2px 琥珀竖条 + 4% 底、底部弹层自动翻转；键盘 ↑↓/Enter/Esc 与 `role="listbox"` 齐备 |
+| 输入框三态 | 通过 | 只剩底部 1px 线；聚焦琥珀线 + 20% 微光（搜索框实测截图）；placeholder 56% 灰；错误态暖红 |
+| 字体细节 | 通过 | 中文只用 400/700（无伪粗体）、中文标题字距 0.02em、拉丁展示 0.08em、全局 `font-smoothing: antialiased`、数字 tabular-nums |
+| 顺带修复 | 通过 | 下拉打开时的厚重琥珀矩形框（改为只有底线）、最近镜头表末行被窗口底边切掉、脊柱"现在"标签压住帧内文字 |
+
+累计：`npm run typecheck` exit=0，`npm test` 42 文件 / 589 例通过，`npm run build` 通过。
+
 ## 复现命令
 
 ```powershell
