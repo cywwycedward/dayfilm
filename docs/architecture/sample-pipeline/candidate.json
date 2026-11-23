@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "diagram_type": "dataflow",
+  "meta": {
+    "title": "采样到汇总：一天的数据流",
+    "subtitle": "从 capture.ps1 的一行 JSON 到界面上的 DayRollup",
+    "locale": "zh-CN",
+    "output": "docs/architecture/sample-pipeline/sample-pipeline.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cywwycedward/dayfilm",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "f7bf333af6b97eda4eed256f79e0b9bc76993e39"
+    }
+  },
+  "stages": [
+    { "label": "采集" },
+    { "label": "闸门" },
+    { "label": "内存" },
+    { "label": "持久化" },
+    { "label": "呈现" }
+  ],
+  "nodes": [
+    {
+      "id": "script",
+      "type": "external",
+      "label": "capture.ps1",
+      "sublabel": "每 2 秒一行 JSON",
+      "stage": 0,
+      "row": 0,
+      "sources": [{ "path": "resources/capture.ps1", "label": "前台窗口轮询输出" }]
+    },
+    {
+      "id": "supervisor",
+      "type": "backend",
+      "label": "采集监督",
+      "sublabel": "1s / 3s / 9s 退避重启",
+      "stage": 0,
+      "row": 2,
+      "sources": [{ "path": "src/main/capture/index.ts", "label": "拉起子进程并逐行解析" }]
+    },
+    {
+      "id": "ingest",
+      "type": "backend",
+      "label": "采样闸门",
+      "sublabel": "时钟守卫 → 脱敏",
+      "stage": 1,
+      "row": 1,
+      "sources": [{ "path": "src/main/ingest/index.ts", "label": "唯一写入入口" }]
+    },
+    {
+      "id": "cache",
+      "type": "backend",
+      "label": "日缓存",
+      "sublabel": "LRU 8 天 + 增量聚合",
+      "stage": 2,
+      "row": 0,
+      "sources": [{ "path": "src/main/reel/cache.ts", "label": "采样数组与 DayAggregator" }]
+    },
+    {
+      "id": "buffer",
+      "type": "backend",
+      "label": "落盘缓冲",
+      "sublabel": "失败每 5 秒重试",
+      "stage": 2,
+      "row": 2,
+      "sources": [{ "path": "src/main/store/buffer.ts", "label": "上限 1000 条的写重试" }]
+    },
+    {
+      "id": "dayFiles",
+      "type": "database",
+      "label": "days/*.jsonl",
+      "sublabel": "只追加原始采样",
+      "stage": 3,
+      "row": 2,
+      "sources": [{ "path": "src/main/store/index.ts", "label": "按本地日期追加与读取" }]
+    },
+    {
+      "id": "renderer",
+      "type": "frontend",
+      "label": "主窗口 / HUD",
+      "sublabel": "tick 每 2 秒",
+      "stage": 4,
+      "row": 0,
+      "sources": [{ "path": "src/renderer/src/app.ts", "label": "渲染收到的 LiveState" }]
+    }
+  ],
+  "flows": [
+    { "from": "script", "to": "supervisor", "label": "stdout 行", "variant": "dashed", "route": "vertical-channel" },
+    { "from": "supervisor", "to": "ingest", "label": "逐条采样", "variant": "emphasis" },
+    { "from": "ingest", "to": "cache", "label": "验时 + 脱敏", "variant": "emphasis" },
+    { "from": "ingest", "to": "buffer", "label": "同一份采样", "variant": "emphasis" },
+    { "from": "buffer", "to": "dayFiles", "label": "append" },
+    { "from": "dayFiles", "to": "cache", "label": "首次访问全量读", "variant": "dashed" },
+    { "from": "cache", "to": "renderer", "label": "DayRollup + 实时镜头", "variant": "emphasis" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "闸门只做三件事",
+      "items": [
+        "丢弃 t 不大于该日最后一条的采样（系统时钟回拨），只记计数不弹窗",
+        "命中内置或自定义脱敏词的标题写成 [已隐藏]，进程名保留",
+        "通过后同时进内存缓存与落盘缓冲，两条路径看到同一份采样"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "内存里的派生",
+      "items": [
+        "DayAggregator 只处理尾部新增，rollup 与 buildDayRollup 结果必须一致",
+        "镜头、剪辑、题材、最长镜头都不落盘，换一天就重算",
+        "标记与自动花絮阈值在读取时叠加（applyMarks），不进增量状态"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "落盘不丢数据",
+      "items": [
+        "写失败留在内存缓冲，每 5 秒重试，超过 1000 条丢最旧的并计数",
+        "退出前先停采集再 drain 缓冲",
+        "崩溃留下的半行会让下一条粘成坏 JSON，追加前先补换行"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,149 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Dayfilm 系统总览",
+    "subtitle": "采集 → 存储 → 切分 → 呈现，以及窗口、桥与守卫的分工",
+    "locale": "zh-CN",
+    "output": "docs/architecture/system-overview/system-overview.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cywwycedward/dayfilm",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "f7bf333af6b97eda4eed256f79e0b9bc76993e39"
+    }
+  },
+  "components": [
+    {
+      "id": "users",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "主窗口 / 托盘 / HUD",
+      "icon": "person",
+      "sources": [{ "path": "docs/product/dayfilm.md", "label": "单人使用的常驻程序" }],
+      "pos": [40, 160],
+      "size": [140, 60]
+    },
+    {
+      "id": "mainWindow",
+      "type": "frontend",
+      "label": "主窗口界面",
+      "sublabel": "胶片 / 放映 / 镜头表",
+      "tag": "sandbox 渲染进程",
+      "sources": [{ "path": "src/renderer/src/app.ts", "label": "视图编排与交互" }],
+      "pos": [240, 75],
+      "size": [190, 68]
+    },
+    {
+      "id": "hudWindow",
+      "type": "frontend",
+      "label": "导演 HUD",
+      "sublabel": "360×148 置顶小窗",
+      "tag": "独立渲染进程",
+      "sources": [{ "path": "src/renderer/src/hud.ts", "label": "HUD 页面渲染" }],
+      "pos": [240, 290],
+      "size": [190, 60]
+    },
+    {
+      "id": "preload",
+      "type": "backend",
+      "label": "preload 白名单桥",
+      "sublabel": "contextBridge 暴露 4 个入口",
+      "tag": "window.dayfilm",
+      "sources": [{ "path": "src/preload/index.ts", "label": "DayfilmApi / HUD / 窗口 / 放映桥" }],
+      "pos": [480, 185],
+      "size": [180, 68]
+    },
+    {
+      "id": "ipcGuard",
+      "type": "security",
+      "label": "IPC 来源守卫",
+      "sublabel": "只接受本应用页面",
+      "tag": "18 invoke + 1 send",
+      "sources": [{ "path": "src/main/security/index.ts", "label": "可信来源判断" }],
+      "pos": [700, 185],
+      "size": [150, 68]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "主进程编排",
+      "sublabel": "生命周期 / 窗口 / 推送 / 导出",
+      "tag": "src/main/index.ts",
+      "sources": [{ "path": "src/main/index.ts", "label": "启动编排与 IPC 实现" }],
+      "pos": [900, 185],
+      "size": [185, 68]
+    },
+    {
+      "id": "capture",
+      "type": "backend",
+      "label": "采集与切分",
+      "sublabel": "capture / ingest / reel",
+      "tag": "无 Electron 依赖",
+      "sources": [{ "path": "src/main/capture/index.ts", "label": "采集子进程监督" }],
+      "pos": [900, 20],
+      "size": [185, 62]
+    },
+    {
+      "id": "captureScript",
+      "type": "external",
+      "label": "capture.ps1",
+      "sublabel": "前台窗口轮询",
+      "tag": "PowerShell",
+      "sources": [{ "path": "resources/capture.ps1", "label": "每 2 秒输出一行 JSON" }],
+      "pos": [700, 20],
+      "size": [150, 62]
+    },
+    {
+      "id": "dataDir",
+      "type": "database",
+      "label": "本地数据目录",
+      "sublabel": "%APPDATA%\\dayfilm",
+      "tag": "days / settings / notes / marks",
+      "sources": [{ "path": "src/main/store/index.ts", "label": "按日 JSONL 追加与读取" }],
+      "pos": [900, 340],
+      "size": [185, 68]
+    }
+  ],
+  "connections": [
+    { "id": "users-main", "from": "users", "to": "mainWindow", "label": "操作与回看" },
+    { "id": "users-hud", "from": "users", "to": "hudWindow", "label": "拖动 / 开关", "variant": "dashed" },
+    { "id": "main-preload", "from": "mainWindow", "to": "preload", "label": "window.dayfilm" },
+    { "id": "hud-preload", "from": "hudWindow", "to": "preload", "label": "dayfilmHud.open" },
+    { "id": "preload-guard", "from": "preload", "to": "ipcGuard", "label": "IPC" },
+    { "id": "guard-core", "from": "ipcGuard", "to": "core", "label": "可信" },
+    { "id": "core-capture", "from": "core", "to": "capture", "label": "采样入管线" },
+    { "id": "script-capture", "from": "captureScript", "to": "capture", "label": "采样行", "variant": "dashed" },
+    { "id": "core-data", "from": "core", "to": "dataDir", "label": "Node fs 读写" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "常驻形态",
+      "items": [
+        "关窗只收进托盘并继续采样，托盘菜单可打开、暂停、开关 HUD、退出",
+        "托盘图标三态：采集中 / 已暂停 / 出错，出错优先",
+        "单实例运行，再次启动把已有窗口带到前台"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "采样主线",
+      "items": [
+        "capture.ps1 每 2 秒输出一行 JSON，主进程收到时打时间戳",
+        "时钟守卫丢弃倒序采样；命中脱敏词的标题写成 [已隐藏]，其余字段不变",
+        "镜头与汇总都是内存派生，不落盘；日文件只追加原始采样"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "呈现与导出",
+      "items": [
+        "主进程每 2 秒推送 tick，主窗口与 HUD 共用同一个 LiveState",
+        "剧本 .md、EDL .edl、PDF .pdf 由主进程生成；海报 .png 由界面渲染后交给主进程写盘",
+        "四种导出都走保存对话框，取消返回空路径"
+      ]
+    }
+  ]
+}

@@ -9,13 +9,15 @@
 ## 目录
 
 ```text
-src/main/      主进程：采集、存储、切分、IPC
-src/preload/   渲染进程与主进程之间的桥
-src/renderer/  界面
-src/shared/    共享类型与通道名
-resources/     随应用分发的脚本与静态资源
-tests/         单元与集成测试
-docs/          项目文档
+src/main/      主进程：采集、闸门、存储、切分、导出、IPC、托盘与 HUD
+src/preload/   渲染进程与主进程之间的白名单桥
+src/renderer/  界面（主窗口 + HUD 页面）与 lib/ 里的纯函数派生
+src/shared/    共享类型、通道名、设置与项目匹配
+resources/     随应用分发的脚本（capture.ps1）与托盘图标
+build/         打包图标源文件
+scripts/       验收探针与打包辅助（不参与构建）
+tests/         单元与集成测试（tests/perf 是性能基准）
+docs/          项目文档；架构图在 docs/architecture/<图名>/，源与成品同目录
 ```
 
 ## 命令
@@ -27,7 +29,7 @@ docs/          项目文档
 | `npm start` | 以构建产物启动（先 `npm run build`） |
 | `npm run build` | 构建主进程、preload、界面 |
 | `npm run typecheck` | 类型检查 |
-| `npm test` | 运行测试（含 `tests/perf` 的基准，约 2 秒） |
+| `npm test` | 运行测试（含 `tests/perf` 的基准，约 5 秒） |
 | `npm run pack` | 打解包产物到 `dist/win-unpacked`（`electron-builder --dir`） |
 | `npm run dist` | 打便携版 `dist/Dayfilm-<版本>-portable.exe` |
 
@@ -49,12 +51,12 @@ docs/          项目文档
 | --- | --- |
 | `probe-app.mjs` | 启动构建产物，读真实 IPC 返回并截图 |
 | `probe-settings.mjs` | 走一遍设置面板、暂停与恢复、错误字段 |
-| `probe-ui.mjs` | 造一份历史日数据，验证日期切换与检索 |
-| `probe-recovery.mjs` | 杀掉采集子进程，验证自恢复与无孤儿进程 |
+| `probe-ui.mjs` / `probe-v11.mjs` … `probe-v26.mjs` | 造历史数据，按版本核对界面与交互 |
+| `probe-recovery.mjs` / `probe-close-to-tray.mjs` | 杀掉采集子进程验证自恢复；验证关窗收进托盘 |
 | `probe-metrics.mjs` | 启动耗时、空闲 CPU、RSS 与收进托盘后的状态 |
-| `probe-mock.cjs` | mock 数据下的版式与回放帧率 |
+| `probe-mock.cjs` / `probe-visual.mjs` | mock 数据下的版式与视觉截图 |
 | `probe-packaged.mjs` | 打包产物启动并验证 IPC |
-| `pack/make-icon.cjs`、`pack/verify.cjs` | 生成图标、校验解包产物 |
+| `fetch-fonts.mjs`、`pack/make-icon.cjs`、`pack/verify.cjs` | 拉取自托管字体、生成图标、校验解包产物 |
 
 ## 代码风格
 

@@ -15,4 +15,6 @@
 | [功能规格](specs/INDEX.md) | 指向功能的预期行为和验收标准的权威来源。 | 实现、修改或验证某项功能时。 |
 | [项目模板](templates/INDEX.md) | 收录可复用的项目文档模板及适用条件。 | 拟写已有模板覆盖的项目文档时。 |
 
+仓库根目录另有三份入口：[README](../README.md)（安装、功能概览与开发命令）、[PRODUCT](../PRODUCT.md)（产品原则）、[DESIGN](../DESIGN.md)（设计系统）；后两份在产品索引里有登记。
+
 架构图统一用 `archify` Skill 设计，图种按 `architecture-design` 选择，每张图各占 `docs/architecture/` 下一个文件夹，文件夹名体现图的对象和视图。

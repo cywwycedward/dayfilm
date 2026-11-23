@@ -1,0 +1,164 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "窗口与信任边界",
+    "subtitle": "两个沙箱渲染进程、一个白名单桥，以及只认本应用页面的主进程入口",
+    "locale": "zh-CN",
+    "output": "docs/architecture/window-trust-boundary/window-trust-boundary.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cywwycedward/dayfilm",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "f7bf333af6b97eda4eed256f79e0b9bc76993e39"
+    }
+  },
+  "components": [
+    {
+      "id": "devServer",
+      "type": "external",
+      "label": "vite devserver",
+      "sublabel": "仅开发模式",
+      "tag": "ELECTRON_RENDERER_URL",
+      "sources": [{ "path": "src/main/index.ts", "label": "打包版忽略该环境变量" }],
+      "pos": [40, 100],
+      "size": [160, 60]
+    },
+    {
+      "id": "users",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "键鼠操作",
+      "icon": "person",
+      "pos": [40, 300],
+      "size": [140, 60]
+    },
+    {
+      "id": "mainWindow",
+      "type": "frontend",
+      "label": "主窗口",
+      "sublabel": "无边框 / 自绘窗口按钮",
+      "tag": "sandbox: true",
+      "sources": [{ "path": "src/renderer/index.html", "label": "界面与 CSP" }],
+      "pos": [240, 270],
+      "size": [180, 68]
+    },
+    {
+      "id": "preload",
+      "type": "backend",
+      "label": "preload 桥",
+      "sublabel": "4 个 contextBridge 入口",
+      "tag": "contextIsolation: true",
+      "sources": [{ "path": "src/preload/index.ts", "label": "白名单方法逐个转发" }],
+      "pos": [240, 420],
+      "size": [180, 68]
+    },
+    {
+      "id": "hudWindow",
+      "type": "frontend",
+      "label": "导演 HUD",
+      "sublabel": "置顶 / 不抢焦点",
+      "tag": "只暴露 open()",
+      "sources": [{ "path": "src/main/hud/index.ts", "label": "独立 BrowserWindow" }],
+      "pos": [240, 570],
+      "size": [180, 68]
+    },
+    {
+      "id": "ipcGuard",
+      "type": "security",
+      "label": "IPC 来源守卫",
+      "sublabel": "有窗口 + 页面可信",
+      "tag": "18 invoke + 1 send",
+      "sources": [{ "path": "src/main/index.ts", "label": "handleIpc / listenIpc 统一包装" }],
+      "pos": [500, 420],
+      "size": [175, 68]
+    },
+    {
+      "id": "core",
+      "type": "backend",
+      "label": "主进程实现",
+      "sublabel": "通道 → 真实能力",
+      "tag": "src/main",
+      "sources": [{ "path": "src/main/ipc/index.ts", "label": "通道登记与 handler 映射" }],
+      "pos": [725, 420],
+      "size": [175, 68]
+    },
+    {
+      "id": "netGuard",
+      "type": "security",
+      "label": "网络守卫",
+      "sublabel": "onBeforeRequest",
+      "tag": "只放行本机来源",
+      "sources": [{ "path": "src/main/security/index.ts", "label": "isLocalRequest 判定" }],
+      "pos": [725, 270],
+      "size": [175, 68]
+    },
+    {
+      "id": "remote",
+      "type": "external",
+      "label": "远程内容",
+      "sublabel": "脚本 / 样式 / 导航",
+      "tag": "一律取消",
+      "pos": [725, 100],
+      "size": [175, 56]
+    },
+    {
+      "id": "dataDir",
+      "type": "database",
+      "label": "本地数据目录",
+      "sublabel": "采样 / 设置 / 标记 / 手记",
+      "tag": "%APPDATA%\\dayfilm",
+      "sources": [{ "path": "src/main/store/index.ts", "label": "唯一落盘入口之一" }],
+      "pos": [725, 570],
+      "size": [175, 68]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "security-group",
+      "label": "沙箱渲染进程（主窗口 + HUD）",
+      "wraps": ["mainWindow", "preload", "hudWindow"]
+    }
+  ],
+  "connections": [
+    { "id": "users-main", "from": "users", "to": "mainWindow", "label": "本地操作" },
+    { "id": "dev-main", "from": "devServer", "to": "mainWindow", "label": "仅开发加载", "variant": "dashed" },
+    { "id": "main-preload", "from": "mainWindow", "to": "preload", "label": "window.dayfilm" },
+    { "id": "hud-preload", "from": "hudWindow", "to": "preload", "label": "dayfilmHud.open" },
+    { "id": "preload-guard", "from": "preload", "to": "ipcGuard", "label": "IPC" },
+    { "id": "guard-core", "from": "ipcGuard", "to": "core", "label": "可信" },
+    { "id": "main-net", "from": "mainWindow", "to": "netGuard", "label": "所有请求" },
+    { "id": "net-remote", "from": "netGuard", "to": "remote", "label": "取消", "variant": "security" },
+    { "id": "core-data", "from": "core", "to": "dataDir", "label": "Node fs" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "渲染进程的硬约束",
+      "items": [
+        "sandbox: true、contextIsolation: true、nodeIntegration: false，两个窗口同一套 webPreferences",
+        "CSP 不允许远程脚本、样式、图片与 eval；新窗口与站外导航一律拒绝",
+        "两个窗口共用同一份 DayfilmApi；HUD 只用 live/onTick 渲染，另有一个 open() 用来点开主窗口"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "IPC 的两个方向",
+      "items": [
+        "invoke 覆盖取数、设置、导出、标记、HUD、退出；send 只有 HUD 单击打开主窗口",
+        "主进程另外推送 tick、放映切换、最大化变化三个单向通知",
+        "非法入参按契约回落成空结果，不抛异常；来源不可信直接拒绝并只记通道名"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "为什么守卫在 main",
+      "items": [
+        "trustedOrigin 只认 devserver 与本地 index.html；打包版连回环都取消",
+        "同一套判断同时管 invoke 与 send，新增通道漏加守卫会被单测抓住",
+        "日志只留通道名与进程名，窗口标题不进日志"
+      ]
+    }
+  ]
+}

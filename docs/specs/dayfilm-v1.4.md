@@ -1,5 +1,7 @@
 # Dayfilm v1.4 功能规格（导演工具箱）
 
+> 导出格式有更新：v2 起 EDL 跳过花絮、头部加 NOTE 行、clip name 用 ASCII 分隔符、记录轴帧向上取整，见 [v2 功能规格](dayfilm-v2.md) 的 R64。
+
 在 v1.3 的视觉基础上，把 Dayfilm 从"事后回看"往前推一步：工作时能看见自己在拍什么（HUD），回放时有旁白（字幕），成果能带走（EDL），切日有仪式（片头卡）。视觉规则仍以[视觉语言](../product/visual-language.md)为准。
 
 ## R40 导演 HUD

@@ -1,0 +1,138 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "四类导出的同一条路径",
+    "subtitle": "校验 → 保存对话框 → 生成 → 写盘，失败与取消都不静默",
+    "locale": "zh-CN",
+    "output": "docs/architecture/export-paths/export-paths.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cywwycedward/dayfilm",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "f7bf333af6b97eda4eed256f79e0b9bc76993e39"
+    }
+  },
+  "lanes": [
+    { "id": "ui", "label": "界面" },
+    { "id": "main", "label": "主进程" },
+    { "id": "disk", "label": "用户选择的位置" },
+    { "id": "fail", "label": "取消与失败", "variant": "exception" }
+  ],
+  "phases": [
+    { "id": "choose", "label": "校验与选路", "fromCol": 0, "toCol": 2 },
+    { "id": "build", "label": "生成内容", "fromCol": 3, "toCol": 3, "variant": "emphasis" },
+    { "id": "deliver", "label": "写盘与回执", "fromCol": 4, "toCol": 5, "variant": "dashed" }
+  ],
+  "mainPath": ["trigger", "validate", "dialog", "build", "write", "done"],
+  "nodes": [
+    {
+      "id": "trigger",
+      "lane": "ui",
+      "col": 0,
+      "type": "frontend",
+      "label": "导出入口",
+      "sublabel": "剧本 / EDL / PDF / 海报",
+      "sources": [{ "path": "src/renderer/src/app.ts", "label": "四个导出入口与菜单" }]
+    },
+    {
+      "id": "validate",
+      "lane": "main",
+      "col": 1,
+      "type": "security",
+      "label": "校验入参",
+      "sublabel": "日期 / PNG 大小与魔数",
+      "tag": "非法 → 空路径",
+      "sources": [{ "path": "src/main/save-image.ts", "label": "base64 上限与 PNG 解码" }]
+    },
+    {
+      "id": "dialog",
+      "lane": "main",
+      "col": 2,
+      "type": "backend",
+      "label": "保存对话框",
+      "sublabel": "默认名 dayfilm-<date>",
+      "tag": ".md / .edl / .pdf / .png",
+      "sources": [{ "path": "src/main/index.ts", "label": "showSaveDialog + 固定扩展名" }]
+    },
+    {
+      "id": "build",
+      "lane": "main",
+      "col": 3,
+      "type": "backend",
+      "label": "生成内容",
+      "sublabel": "Markdown / CMX3600 / printToPDF",
+      "tag": "海报在界面渲染",
+      "sources": [{ "path": "src/main/edl/index.ts", "label": "renderEdl 与写盘" }]
+    },
+    {
+      "id": "write",
+      "lane": "disk",
+      "col": 4,
+      "type": "database",
+      "label": "写盘",
+      "sublabel": "用户选的路径",
+      "tag": "UTF-8 / 二进制",
+      "sources": [{ "path": "src/main/export/index.ts", "label": "扩展名归一" }]
+    },
+    {
+      "id": "done",
+      "lane": "ui",
+      "col": 5,
+      "type": "frontend",
+      "label": "回执",
+      "sublabel": "提示落盘路径",
+      "sources": [{ "path": "src/renderer/src/app.ts", "label": "导出成功提示" }]
+    },
+    {
+      "id": "cancel",
+      "lane": "fail",
+      "col": 2,
+      "type": "external",
+      "label": "用户取消",
+      "sublabel": "返回 { path: '' }",
+      "tag": "不提示错误",
+      "sources": [{ "path": "src/main/index.ts", "label": "canceled 分支返回空路径" }]
+    },
+    {
+      "id": "error",
+      "lane": "fail",
+      "col": 4,
+      "type": "security",
+      "label": "写盘失败",
+      "sublabel": "可读错误上抛给界面",
+      "tag": "EACCES / ENOSPC",
+      "sources": [{ "path": "src/main/errors.ts", "label": "describeWriteError 文案" }]
+    }
+  ],
+  "edges": [
+    { "from": "trigger", "to": "validate", "label": "date / base64", "variant": "emphasis", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "validate", "to": "dialog", "label": "合法" },
+    { "from": "dialog", "to": "build", "label": "选定路径", "variant": "emphasis" },
+    { "from": "build", "to": "write", "label": "内容", "variant": "emphasis" },
+    { "from": "write", "to": "done", "label": "path", "variant": "emphasis" },
+    { "from": "dialog", "to": "cancel", "label": "取消", "role": "branch", "route": "drop", "fromSide": "bottom", "toSide": "top" },
+    { "from": "write", "to": "error", "label": "失败", "variant": "security", "role": "error", "route": "drop", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "四种格式，一套约定",
+      "items": [
+        "剧本 Markdown 与 EDL 由主进程直接生成；PDF 用隐藏窗口 printToPDF；海报 PNG 在界面 Canvas 渲染后交给主进程",
+        "写入前统一改扩展名，用户手输 x.txt 也落成 x.md / x.edl / x.pdf / x.png",
+        "取消一律返回空路径，界面不弹错误"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "失败要说话",
+      "items": [
+        "写盘失败抛可读错误（含错误码与人话），由 IPC rejection 交给界面提示",
+        "图片只接受 base64 PNG，超过 20 MB 或魔数不符直接回空路径",
+        "导出日期非法时回空路径，不去猜测用户想要的日期"
+      ]
+    }
+  ]
+}

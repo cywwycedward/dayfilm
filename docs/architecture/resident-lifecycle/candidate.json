@@ -1,0 +1,121 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "常驻程序与采样的状态",
+    "subtitle": "启动、采集中、暂停、休眠、中断与退出",
+    "locale": "zh-CN",
+    "output": "docs/architecture/resident-lifecycle/resident-lifecycle.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/cywwycedward/dayfilm",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "f7bf333af6b97eda4eed256f79e0b9bc76993e39"
+    }
+  },
+  "mainPath": ["starting", "capturing", "quitting"],
+  "states": [
+    {
+      "id": "starting",
+      "type": "start",
+      "label": "启动",
+      "sublabel": "读设置 / 清理保留期 / 建窗口",
+      "tag": "app.whenReady",
+      "step": "01",
+      "sources": [{ "path": "src/main/index.ts", "label": "启动编排顺序" }]
+    },
+    {
+      "id": "capturing",
+      "type": "active",
+      "label": "采集中",
+      "sublabel": "镜头持续累积",
+      "tag": "每 2 秒一行",
+      "step": "02",
+      "sources": [{ "path": "src/main/capture/index.ts", "label": "子进程常驻" }]
+    },
+    {
+      "id": "paused",
+      "type": "waiting",
+      "label": "已暂停",
+      "sublabel": "设置 paused = true",
+      "tag": "停子进程",
+      "sources": [{ "path": "src/main/index.ts", "label": "applySettings 停采集" }]
+    },
+    {
+      "id": "suspended",
+      "type": "waiting",
+      "label": "系统休眠",
+      "sublabel": "挂起区间不补数据",
+      "tag": "powerMonitor",
+      "sources": [{ "path": "src/main/index.ts", "label": "suspend / resume 接线" }]
+    },
+    {
+      "id": "captureError",
+      "type": "failure",
+      "label": "采集中断",
+      "sublabel": "退避 1s / 3s / 9s",
+      "tag": "自动重启",
+      "sources": [{ "path": "src/main/capture/index.ts", "label": "退出后按退避重启" }]
+    },
+    {
+      "id": "stopped",
+      "type": "failure",
+      "label": "采集已停止",
+      "sublabel": "重试用尽，只留错误",
+      "tag": "需重启应用",
+      "sources": [{ "path": "src/main/capture/index.ts", "label": "退避表用完后放弃" }]
+    },
+    {
+      "id": "quitting",
+      "type": "neutral",
+      "label": "退出",
+      "sublabel": "停采集 → 冲刷缓冲 → 注销快捷键",
+      "tag": "before-quit",
+      "step": "03",
+      "sources": [{ "path": "src/main/index.ts", "label": "before-quit 收尾" }]
+    }
+  ],
+  "transitions": [
+    { "id": "start-run", "from": "starting", "to": "capturing", "label": "未暂停则拉起采集" },
+    { "id": "run-pause", "from": "capturing", "to": "paused", "label": "托盘 / 设置暂停" },
+    { "id": "pause-run", "from": "paused", "to": "capturing", "label": "继续采样" },
+    { "id": "run-sleep", "from": "capturing", "to": "suspended", "label": "系统挂起" },
+    { "id": "sleep-run", "from": "suspended", "to": "capturing", "label": "唤醒且未暂停" },
+    { "id": "run-error", "from": "capturing", "to": "captureError", "label": "子进程退出", "variant": "security" },
+    { "id": "error-run", "from": "captureError", "to": "capturing", "label": "退避后重启", "variant": "dashed" },
+    { "id": "error-stop", "from": "captureError", "to": "stopped", "label": "三次都没起来", "variant": "security" },
+    { "id": "run-quit", "from": "capturing", "to": "quitting", "label": "托盘退出 / quit 通道" },
+    { "id": "pause-quit", "from": "paused", "to": "quitting", "label": "托盘退出" },
+    { "id": "stop-quit", "from": "stopped", "to": "quitting", "label": "托盘退出" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "窗口与常驻",
+      "items": [
+        "关窗只收进托盘，采样继续；托盘菜单负责打开、暂停、HUD、退出",
+        "单实例运行，再次启动把已有窗口带到前台",
+        "托盘建不起来时退回“关完就退”，并强制显示窗口，避免留下看不见的进程"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "暂停与休眠的区别",
+      "items": [
+        "暂停是用户意图，写进设置，重启后仍暂停",
+        "休眠是系统事件，只停采集，不写设置；唤醒后只有未暂停才恢复",
+        "两种情况都不补数据，表现为胶片上的采集空隙"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "退出前必须做的三件事",
+      "items": [
+        "先停采集再冲刷落盘缓冲，避免收尾期间还有新采样",
+        "停 tick 定时器、销毁托盘与 HUD、注销全局快捷键",
+        "退出走 isQuitting 标记，让窗口 close 不再被拦成隐藏"
+      ]
+    }
+  ]
+}
