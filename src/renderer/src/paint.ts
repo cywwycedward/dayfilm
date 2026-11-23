@@ -180,20 +180,39 @@ export function paintSpine(
     const filled = frame.scene !== null && frame.hue !== null
 
     if (filled && frame.scene !== null && frame.hue !== null) {
-      // 左右各 2px 族色边 + 中间的剧照缩略（紧凑帧档）
+      // 左右各 2px 族色边 + 中间：8px 大写应用名 + 右侧镜号
       ctx.fillStyle = familyColor(frame.hue, 0.9)
       ctx.fillRect(0, y + 1, 2, frameH - 2)
       ctx.fillRect(filmW - 2, y + 1, 2, frameH - 2)
-      drawStill(
-        ctx,
-        frame.scene,
-        options.ordinals.get(frame.scene.id) ?? 0,
-        options.date,
-        2,
-        y + 1,
-        filmW - 4,
-        frameH - 2
-      )
+      ctx.fillStyle = 'rgba(236, 231, 220, 0.07)'
+      ctx.fillRect(2, y + 1, filmW - 4, frameH - 2)
+
+      const ordinal = options.ordinals.get(frame.scene.id) ?? 0
+      const shot = ordinal > 0 ? `#${String(ordinal).padStart(2, '0')}` : ''
+      ctx.font = "400 8px 'Bebas', 'Plex Sans', sans-serif"
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'middle'
+      const shotW = shot.length > 0 ? ctx.measureText(shot).width : 0
+      if (shotW > 0) {
+        ctx.fillStyle = 'rgba(236, 231, 220, 0.55)'
+        ctx.fillText(shot, filmW - 5, y + frameH / 2)
+      }
+      const name = (frame.scene.exe || frame.scene.title).toUpperCase()
+      const maxName = filmW - 10 - shotW
+      if (name.length > 0 && maxName > 8) {
+        ctx.textAlign = 'left'
+        let text = name
+        if (ctx.measureText(text).width > maxName) {
+          while (text.length > 1 && ctx.measureText(`${text}…`).width > maxName) {
+            text = text.slice(0, -1)
+          }
+          text = `${text}…`
+        }
+        ctx.fillStyle = 'rgba(236, 231, 220, 0.9)'
+        ctx.fillText(text, 5, y + frameH / 2)
+      }
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
     } else {
       // 空档：45° 细斜纹，与放映空档态同一套语言
       ctx.save()
@@ -240,7 +259,8 @@ export function paintSpine(
       ctx.textAlign = 'left'
       ctx.textBaseline = 'middle'
       const textW = ctx.measureText(now.label).width
-      const labelX = densityEnd + 6
+      // 单独占 16px 车道：不压密度柱
+      const labelX = densityEnd + 16
       // 40% 墨色底，避免与帧内应用名叠字
       ctx.fillStyle = 'rgba(10, 11, 13, 0.4)'
       ctx.fillRect(labelX - 3, y - 14, Math.min(textW + 6, width - labelX + 3), 13)
@@ -388,7 +408,10 @@ export function paintPoster(ctx: CanvasRenderingContext2D, layout: PosterLayout)
     ctx.font = posterFont('mono', 10, 400)
     ctx.fillStyle = palette.muted
     layout.ruler.ticks.forEach((tick, index, all) => {
-      ctx.textAlign = index === 0 ? 'left' : index === all.length - 1 ? 'right' : 'center'
+      let align: 'left' | 'right' | 'center' = 'center'
+      if (index === 0) align = 'left'
+      else if (index === all.length - 1) align = 'right'
+      ctx.textAlign = align
       ctx.fillText(tick.label, tick.x, layout.ruler.y + 20)
     })
     ctx.textAlign = 'left'

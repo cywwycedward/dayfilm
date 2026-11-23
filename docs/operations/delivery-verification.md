@@ -151,6 +151,27 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 
 累计：`npm run typecheck` exit=0，`npm test` 42 文件 / 589 例通过，`npm run build` 通过。
 
+## v2.2 细节打磨
+
+这一轮不引入新功能，只按项目指定的设计 skill（impeccable）的 detector 与人工截图逐项收细节。
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 头部窗口按钮 | 通过 | 右侧 8px 内距、按钮间 2px；关闭悬停暖红不变 |
+| 空档态 | 通过 | hero 与放映共用同一套"空档 / 摄影机未运行 · 下一镜"文案与斜纹 |
+| 空闲中标签 | 通过 | 由带边框的按钮样式改为 4% 底标签（10px mono 大写、字距 0.12em） |
+| 项目标签空态 | 通过 | 无规则时显示"未设置"，不再是一个孤零零的破折号 |
+| 脊柱帧 | 通过 | 应用名 8px 大写 + 右侧镜号（#116/#27…），超长省略，不再被截成 WINDOW… |
+| 现在标记 | 通过 | 单独占 16px 车道，不压密度柱与帧文字 |
+| 最近镜头表 | 通过 | 三列 nowrap + 省略号，行高写死 32px，可见行数按可用高度取整并配合 scroll-snap，半行消失 |
+| 数字对齐 | 通过 | 最长镜头/最长休息与上方三列数字共用右边界 |
+| 放映时间码 | 通过 | 主时间码满亮，`/ 24:00:00` 降到 55% |
+| 窗体边界 | 通过 | 1px 内描边 `rgba(236,231,220,.06)`，深色桌面上有轮廓 |
+| 字体 | 通过 | 正文字体从 Inter 换成 IBM Plex Sans（与 Plex Mono 同族），HUD 的 9px 标签提到 11px |
+| detector | 通过 | `impeccable detect --json src/renderer` 从 11 条发现降到 **0 条**（undersized text / overused font / broken image / flat type hierarchy / em-dash overuse 全部消除） |
+
+累计：`npm run typecheck` exit=0，`npm test` 42 文件 / 589 例通过，`npm run build` 通过。
+
 ## 复现命令
 
 ```powershell

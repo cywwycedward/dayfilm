@@ -1,4 +1,4 @@
-/* 导演 HUD · 360×148 透明置顶小窗。只被 hud.html 引用。 */
+/* 导演 HUD · 360×148 透明置顶小窗。只�?hud.html 引用�?*/
 
 @font-face {
   font-family: 'Bebas';
@@ -9,7 +9,7 @@
 }
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'Plex Sans';
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -34,8 +34,8 @@
   --red: #b8524a;
   --hairline: rgba(236, 231, 220, 0.07);
   --hairline-strong: rgba(236, 231, 220, 0.14);
-  --font-display: 'Bebas', 'Inter', 'Microsoft YaHei UI', sans-serif;
-  --font-ui: 'Inter', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Bebas', 'Plex Sans', 'Microsoft YaHei UI', sans-serif;
+  --font-ui: 'Plex Sans', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Plex Mono', 'Cascadia Mono', Consolas, monospace;
 }
 
@@ -57,7 +57,7 @@ body {
   color: var(--paper);
 }
 
-/* 整窗可拖动；选择与滚动全部关掉 */
+/* 整窗可拖动；选择与滚动全部关�?*/
 .hud {
   display: grid;
   grid-template-rows: 12px 24px 12px 24px 14px;
@@ -66,7 +66,7 @@ body {
   height: 148px;
   padding: 12px 16px 12px;
   border: 1px solid rgba(236, 231, 220, 0.08);
-  /* §8.6：发丝线 + 5% 底色抬升，不用圆角大框 */
+  /* §8.6：发丝线 + 5% 底色抬升，不用圆角大�?*/
   background: rgba(20, 22, 28, 0.96);
   -webkit-app-region: drag;
   user-select: none;
@@ -105,7 +105,7 @@ body {
 }
 
 .hud__status {
-  font: 400 9px/1 var(--font-mono);
+  font: 400 11px/1 var(--font-mono); letter-spacing: 0.1em;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--amber);
@@ -172,7 +172,7 @@ body {
   color: var(--red);
 }
 
-/* 最近 30 分钟：每分钟一根 2px 柱，纸色 18%，底部对齐，间距均分铺满整宽 */
+/* 最�?30 分钟：每分钟一�?2px 柱，纸色 18%，底部对齐，间距均分铺满整宽 */
 .hud__rhythm {
   display: flex;
   align-items: flex-end;
@@ -203,7 +203,7 @@ body {
 
 .hud__metric-label {
   flex: none;
-  font: 400 9px/1 var(--font-mono);
+  font: 400 11px/1 var(--font-mono); letter-spacing: 0.1em;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--paper-dim);
@@ -246,3 +246,4 @@ body {
     transition: none;
   }
 }
+

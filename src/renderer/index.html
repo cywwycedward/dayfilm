@@ -12,7 +12,7 @@
   <body>
     <div id="app">
       <header class="topbar" id="topbar">
-        <h1 class="brand">DAYFILM</h1>
+        <h1 class="brand" style="font-size: 20px">DAYFILM</h1>
         <div class="topbar__date" id="date"></div>
         <span class="chip" id="chip" data-state="ok"
           ><i class="chip__dot"></i><span id="chipText">实时记录中</span></span
@@ -100,33 +100,37 @@
               <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
             </div>
           </div>
-          <h2 class="hero__genre" id="genre">—</h2>
-          <p class="hero__verdict" id="verdict">—</p>
+          <h2 class="hero__genre" id="genre" style="font-size: 128px">…</h2>
+          <p class="hero__verdict" id="verdict">…</p>
 
           <p class="hero__window">
             <span class="hero__window-label">当前窗口</span>
-            <strong id="liveExe">—</strong>
+            <strong id="liveExe">…</strong>
             <span class="hero__window-title" id="liveTitle"></span>
           </p>
 
           <dl class="hero__metrics">
             <div class="hero__metric">
               <dt>当前镜头时长</dt>
-              <dd id="metricShot">—</dd>
+              <dd id="metricShot">…</dd>
             </div>
             <div class="hero__metric">
               <dt>最长镜头</dt>
-              <dd id="metricLongest">—</dd>
+              <dd id="metricLongest">…</dd>
             </div>
             <div class="hero__metric">
               <dt>项目标签</dt>
-              <dd id="metricProject">—</dd>
+              <dd id="metricProject">…</dd>
             </div>
           </dl>
 
           <figure class="hero__frame" id="heroFrame" data-kind="empty">
-            <img id="heroStill" alt="" />
+            <div class="hero__frame-still" id="heroStill" role="img" aria-label="当前镜头剧照"></div>
             <span class="hero__frame-tag" id="heroFrameTag" hidden>中场休息</span>
+            <div class="hero__frame-empty" id="heroFrameEmpty" hidden>
+              <b>空档</b>
+              <span id="heroFrameEmptyText">摄影机未运行</span>
+            </div>
           </figure>
 
           <div class="hero__note">
@@ -162,7 +166,7 @@
         <aside class="rail">
           <section class="rail__block">
             <header class="rail__head">
-              <h2>放映</h2>
+              <h2 style="font-size: 14px">放映</h2>
               <span>回放今天的工作与生活</span>
             </header>
             <div class="player">
@@ -190,22 +194,22 @@
 
           <section class="rail__block">
             <header class="rail__head">
-              <h2>今日统计</h2>
+              <h2 style="font-size: 14px">今日统计</h2>
               <span>工作镜头的剪辑摘要</span>
             </header>
             <dl class="stats" id="metrics"></dl>
             <p class="stats__line">
-              <span>最长镜头</span><b id="longestShot">—</b>
+              <span>最长镜头</span><b id="longestShot">…</b>
             </p>
             <p class="stats__line">
-              <span>最长休息</span><b id="longestRest">—</b>
+              <span>最长休息</span><b id="longestRest">…</b>
             </p>
             <p class="stats__line stats__line--project" id="projectTotals"></p>
           </section>
 
           <section class="rail__block rail__block--grow">
             <header class="rail__head">
-              <h2>最近镜头</h2>
+              <h2 style="font-size: 14px">最近镜头</h2>
               <span id="listCount"></span>
             </header>
             <div class="recent__cols" aria-hidden="true">
@@ -224,7 +228,7 @@
       <section class="week-film" id="weekFilm" hidden>
         <div class="week-film__bar">
           <button class="btn btn--icon" id="weekPrev" type="button" aria-label="上一周">‹</button>
-          <span class="week-film__range" id="weekRange">—</span>
+          <span class="week-film__range" id="weekRange">…</span>
           <button class="btn btn--icon" id="weekNext" type="button" aria-label="下一周">›</button>
           <button class="btn" id="weekToday" type="button">本周</button>
         </div>
@@ -232,7 +236,7 @@
           <section class="arcs" id="weekArcs" aria-label="七日叙事弧"></section>
           <section class="story" id="storyline" aria-label="故事线"></section>
           <section class="week-verdict" aria-label="周导演评语">
-            <p class="week-verdict__sentence" id="weekVerdict">—</p>
+            <p class="week-verdict__sentence" id="weekVerdict">…</p>
             <details class="week-evidence" id="weekEvidence">
               <summary>证据</summary>
               <div class="week-evidence__body" id="weekEvidenceBody"></div>
@@ -244,8 +248,8 @@
 
       <div class="titlecard" id="titleCard" hidden aria-hidden="true">
         <div class="titlecard__inner">
-          <p class="titlecard__date" id="titleCardDate">—</p>
-          <p class="titlecard__verdict" id="titleCardVerdict">—</p>
+          <p class="titlecard__date" id="titleCardDate">…</p>
+          <p class="titlecard__verdict" id="titleCardVerdict">…</p>
           <p class="titlecard__mark">DAYFILM</p>
         </div>
       </div>
@@ -258,12 +262,12 @@
           <span class="projection__cut" id="projectionCuts" hidden></span>
           <div class="projection__subtitle" id="projectionSubtitle" hidden>
             <span class="projection__subtitle-index" id="projectionSubtitleIndex">第 1 镜</span>
-            <span class="projection__subtitle-text" id="projectionSubtitleText">—</span>
+            <span class="projection__subtitle-text" id="projectionSubtitleText">…</span>
           </div>
         </div>
         <div class="projection__caption">
           <span class="projection__index" id="projectionIndex">#01</span>
-          <span class="projection__title" id="projectionTitle">—</span>
+          <span class="projection__title" id="projectionTitle">…</span>
           <span class="projection__clock" id="projectionClock">00:00</span>
         </div>
         <div class="projection__bar">
@@ -283,7 +287,7 @@
         <div class="drawer__scrim" id="drawerScrim"></div>
         <aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
           <header class="panel__head">
-            <h2 id="panelTitle">设置</h2>
+            <h2 id="panelTitle" style="font-size: 11px">设置</h2>
             <button class="btn btn--quiet" id="panelClose" type="button">关闭</button>
           </header>
           <div class="panel__body">
@@ -362,7 +366,7 @@
           aria-labelledby="compareTitle"
         >
           <header class="overlay__head">
-            <h2 id="compareTitle">对比两天</h2>
+            <h2 id="compareTitle" style="font-size: 11px">对比两天</h2>
             <button class="btn btn--quiet" id="compareClose" type="button">关闭</button>
           </header>
           <div class="compare">
@@ -385,7 +389,7 @@
           aria-labelledby="calendarTitle"
         >
           <header class="overlay__head">
-            <h2 id="calendarTitle">片场日历</h2>
+            <h2 id="calendarTitle" style="font-size: 11px">片场日历</h2>
             <span class="calendar__progress" id="calendarProgress" role="status"></span>
             <button class="btn btn--quiet" id="calendarClose" type="button">关闭</button>
           </header>

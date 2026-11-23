@@ -159,8 +159,10 @@ interface Ui {
   liveExe: HTMLElement
   liveTitle: HTMLElement
   heroFrame: HTMLElement
-  heroStill: HTMLImageElement
+  heroStill: HTMLElement
   heroFrameTag: HTMLElement
+  heroFrameEmpty: HTMLElement
+  heroFrameEmptyText: HTMLElement
   metricShot: HTMLElement
   metricLongest: HTMLElement
   metricProject: HTMLElement
@@ -362,8 +364,10 @@ function collect(root: HTMLElement): Ui {
     liveExe: pick<HTMLElement>('liveExe'),
     liveTitle: pick<HTMLElement>('liveTitle'),
     heroFrame: pick<HTMLElement>('heroFrame'),
-    heroStill: pick<HTMLImageElement>('heroStill'),
+    heroStill: pick<HTMLElement>('heroStill'),
     heroFrameTag: pick<HTMLElement>('heroFrameTag'),
+    heroFrameEmpty: pick<HTMLElement>('heroFrameEmpty'),
+    heroFrameEmptyText: pick<HTMLElement>('heroFrameEmptyText'),
     metricShot: pick<HTMLElement>('metricShot'),
     metricLongest: pick<HTMLElement>('metricLongest'),
     metricProject: pick<HTMLElement>('metricProject'),
@@ -507,13 +511,21 @@ function renderLive(): void {
   if (captureError !== null) status = 'error'
   else if (paused) status = 'paused'
   ui.chip.dataset.state = status
-  ui.chipText.textContent =
-    status === 'error' ? '采集中断' : status === 'paused' ? '已暂停' : '实时记录中'
+  let chipLabel = '实时记录中'
+  if (status === 'error') chipLabel = '采集中断'
+  else if (status === 'paused') chipLabel = '已暂停'
+  ui.chipText.textContent = chipLabel
 
   // hero 的「正在拍摄」chip
   const shooting = !paused && scene !== null
-  ui.shootingChip.dataset.state = shooting ? 'shooting' : paused ? 'paused' : 'idle'
-  ui.liveText.textContent = shooting ? '正在拍摄' : paused ? '已暂停' : '空闲中'
+  let chipState = 'idle'
+  if (shooting) chipState = 'shooting'
+  else if (paused) chipState = 'paused'
+  ui.shootingChip.dataset.state = chipState
+  let liveLabel = '空闲中'
+  if (shooting) liveLabel = '正在拍摄'
+  else if (paused) liveLabel = '已暂停'
+  ui.liveText.textContent = liveLabel
   ui.elapsed.hidden = !shooting
   updateElapsed()
 }
@@ -540,8 +552,7 @@ function measure(): void {
   paintSpineCanvas()
 }
 
-/** 最近镜头只显示整行（至少 6 行），底部留 12px 内边距，不被面板底边切掉。 */
-const RECENT_MIN_ROWS = 6
+/** 最近镜头只显示整行，底部留 12px 内边距，不被面板底边切掉。 */
 function fitRecentList(): void {
   const block = ui.listScroll.closest<HTMLElement>('.rail__block')
   const rail = block?.parentElement
@@ -556,9 +567,9 @@ function fitRecentList(): void {
   const rawChrome = block.getBoundingClientRect().height - ui.listScroll.getBoundingClientRect().height
   const chrome = rawChrome > 0 && rawChrome < 160 ? rawChrome : 100
   const room = Math.max(0, railH - others - 32 - chrome)
-  const rows = Math.max(RECENT_MIN_ROWS, Math.floor((room - 12) / rowStride))
-  // 可用高度装得下整行就整行；装不下时容器就取可用高度，超出滚动（不低于 4 行）
-  const target = Math.min(rows * rowStride + 12, Math.max(4 * rowStride, room))
+  // 可见行数 = 可用高 ÷ 行高取整（再多留 4px 防亚像素误差），不设下限，宁少不破行
+  const rows = Math.max(0, Math.floor((room - 12) / rowStride))
+  const target = rows * rowStride + 8
   if (Math.abs(ui.listScroll.getBoundingClientRect().height - target) > 0.5) {
     ui.listScroll.style.height = `${target}px`
   }
@@ -805,7 +816,7 @@ function renderWindow(): void {
     viewportHeight: listViewport,
     overscan: OVERSCAN
   })
-  ui.spacer.style.height = `${range.totalHeight + 12}px`
+  ui.spacer.style.height = `${range.totalHeight + 8}px`
   ui.list.style.transform = `translate3d(0,${range.offset}px,0)`
   const signature = `${listSignature}|${range.start}|${range.end}`
   if (signature === windowSignature) return
@@ -871,21 +882,31 @@ function updateTransport(): void {
 
   if (key !== frameKey) {
     frameKey = key
+    const stillUrl =
+      scene && !intermission
+        ? stillDataUrl(
+            { exe: scene.exe, title: scene.title, kind: scene.kind },
+            dayOrdinals().get(scene.id) ?? 0,
+            isoDate(scene.start),
+            720,
+            280
+          )
+        : ''
+    ui.heroStill.style.backgroundImage = stillUrl.length > 0 ? `url("${stillUrl}")` : ''
     if (scene && !intermission) {
       ui.heroFrame.dataset.kind = 'shot'
       ui.heroFrameTag.hidden = true
-      ui.heroStill.src = stillDataUrl(
-        { exe: scene.exe, title: scene.title, kind: scene.kind },
-        dayOrdinals().get(scene.id) ?? 0,
-        isoDate(scene.start),
-        720,
-        280
-      )
+      ui.heroFrameEmpty.hidden = true
     } else {
       ui.heroFrame.dataset.kind = intermission ? 'intermission' : 'empty'
       ui.heroFrameTag.hidden = !intermission
       ui.heroFrameTag.textContent = intermission ? '中场休息' : ''
-      ui.heroStill.removeAttribute('src')
+      const next = state.day.scenes.find((item) => item.start > state.playhead)
+      ui.heroFrameEmpty.hidden = intermission
+      let emptyText = '摄影机未运行 · 这一天的胶片到此结束'
+      if (state.day.scenes.length === 0) emptyText = '还没有拍摄任何素材'
+      else if (next) emptyText = `摄影机未运行 · 下一镜 ${fmtClock(next.start)}`
+      ui.heroFrameEmptyText.textContent = emptyText
     }
   }
 
@@ -908,7 +929,16 @@ function updateTransport(): void {
   ui.metricShot.textContent = scene ? fmtElapsed(scene.seconds * 1000) : '—'
   const project =
     scene && scene.kind === 'shot' ? matchProject(scene, state.settings.projects) : null
-  ui.metricProject.textContent = project ?? '—'
+  if (project !== null) {
+    ui.metricProject.textContent = project
+    ui.metricProject.removeAttribute('title')
+  } else if (state.settings.projects.length === 0) {
+    ui.metricProject.textContent = '未设置'
+    ui.metricProject.title = '在设置里加一条项目规则，镜头会自动归到项目'
+  } else {
+    ui.metricProject.textContent = '未匹配'
+    ui.metricProject.title = '这一镜没有命中任何项目规则'
+  }
 
   // 进度条只跨素材区间，时间码仍显示真实时刻
   const material = playbackRange(state.day.scenes)

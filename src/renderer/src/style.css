@@ -1,6 +1,6 @@
-/* Dayfilm 呈现层 · 视觉语言 v1.3
+/* Dayfilm 呈现�?· 视觉语言 v1.3
    权威：docs/product/visual-language.md
-   电影感来自版式与留白，不来自装饰：发丝线、字重对比、单色索引。 */
+   电影感来自版式与留白，不来自装饰：发丝线、字重对比、单色索引�?*/
 
 @font-face {
   font-family: 'Bebas';
@@ -11,19 +11,35 @@
 }
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'Plex Sans';
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-  src: url('./assets/fonts/inter-400.woff2') format('woff2');
+  src: url('./assets/fonts/plex-sans-400.woff2') format('woff2');
 }
 
 @font-face {
-  font-family: 'Inter';
+  font-family: 'Plex Sans';
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+  src: url('./assets/fonts/plex-sans-500.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plex Sans';
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+  src: url('./assets/fonts/plex-sans-600.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Plex Sans';
   font-weight: 700;
   font-style: normal;
   font-display: swap;
-  src: url('./assets/fonts/inter-700.woff2') format('woff2');
+  src: url('./assets/fonts/plex-sans-700.woff2') format('woff2');
 }
 
 @font-face {
@@ -57,7 +73,7 @@
   --hairline: rgba(236, 231, 220, 0.07);
   --hairline-strong: rgba(236, 231, 220, 0.14);
   --field: rgba(236, 231, 220, 0.04);
-  /* 浮层用色（§8.6：比背景亮 5%） */
+  /* 浮层用色（�?.6：比背景�?5%�?*/
   --panel: #14161c;
   --panel-line: rgba(236, 231, 220, 0.08);
   --panel-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
@@ -70,11 +86,11 @@
   --s6: 32px;
   --s7: 48px;
 
-  --font-display: 'Bebas', 'Inter', 'Microsoft YaHei UI', sans-serif;
-  --font-ui: 'Inter', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Bebas', 'Plex Sans', 'Microsoft YaHei UI', sans-serif;
+  --font-ui: 'Plex Sans', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
   --font-mono: 'Plex Mono', 'Cascadia Mono', Consolas, monospace;
 
-  /* 镜头列表的固定行高（含行间距），虚拟列表按它算偏移 */
+  /* 镜头列表的固定行高（含行间距），虚拟列表按它算偏�?*/
   --row-stride: 44px;
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -137,7 +153,7 @@ body {
   background: rgba(236, 231, 220, 0.34);
 }
 
-/* 页面主滚动区也不要系统灰条 */
+/* 页面主滚动区也不要系统灰�?*/
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,
 #app::-webkit-scrollbar {
@@ -159,7 +175,7 @@ body::-webkit-scrollbar,
   white-space: nowrap;
 }
 
-/* 小标签：全大写 Plex Mono，字距 .18em，半透明 */
+/* 小标签：全大�?Plex Mono，字�?.18em，半透明 */
 .u-label,
 .field__label,
 .metric__label,
@@ -194,7 +210,7 @@ body::-webkit-scrollbar,
   overflow-y: auto;
 }
 
-/* 固定高度的区块不被 flex 压扁；空间不够时先压胶片，列表至少留两行 */
+/* 固定高度的区块不�?flex 压扁；空间不够时先压胶片，列表至少留两行 */
 #app > * {
   flex: 0 0 auto;
 }
@@ -266,7 +282,7 @@ textarea {
   transition: border-color 160ms var(--ease);
 }
 
-/* 下拉：去掉系统外观，自绘 10px 下三角 + 只有底线（§8.4） */
+/* 下拉：去掉系统外观，自绘 10px 下三�?+ 只有底线（�?.4�?*/
 select {
   appearance: none;
   min-width: 176px;
@@ -294,7 +310,7 @@ textarea:hover {
   border-bottom-color: rgba(236, 231, 220, 0.3);
 }
 
-/* 输入框聚焦只亮底线，不加外框（§8.3） */
+/* 输入框聚焦只亮底线，不加外框（�?.3�?*/
 select:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
@@ -308,7 +324,7 @@ textarea:focus-visible {
   gap: var(--s3);
 }
 
-/* 顶栏按钮之间的发丝竖线（§8.5）：12px 高、上下居中 */
+/* 顶栏按钮之间的发丝竖线（§8.5）：12px 高、上下居�?*/
 .topbar__sep {
   flex: none;
   width: 1px;
@@ -316,7 +332,7 @@ textarea:focus-visible {
   background: rgba(236, 231, 220, 0.14);
 }
 
-/* 按钮三级（§8.5）：次按钮纯文字 + 悬停下划线；主按钮琥珀实底；图标按钮无边框 */
+/* 按钮三级（�?.5）：次按钮纯文字 + 悬停下划线；主按钮琥珀实底；图标按钮无边框 */
 .btn {
   height: 30px;
   padding: 0 var(--s3);
@@ -366,7 +382,7 @@ textarea:focus-visible {
   text-decoration: none;
 }
 
-/* 播放是主按钮：琥珀实底黑字，放映中降一点亮度 */
+/* 播放是主按钮：琥珀实底黑字，放映中降一点亮�?*/
 .btn--play {
   min-width: 86px;
   background: var(--amber);
@@ -388,7 +404,7 @@ textarea:focus-visible {
 }
 
 .btn--quiet {
-  /* 次按钮：与基础按钮同样的内边距，只是没有主按钮的实底 */
+  /* 次按钮：与基础按钮同样的内边距，只是没有主按钮的实�?*/
 }
 
 .btn--danger {
@@ -586,7 +602,7 @@ textarea:focus-visible {
   text-align: center;
 }
 
-/* 日 / 周 模式切换 */
+/* �?/ �?模式切换 */
 .mode {
   display: flex;
   gap: var(--s1);
@@ -677,7 +693,7 @@ textarea:focus-visible {
   letter-spacing: 0.04em;
 }
 
-/* 素材密度直方图：与胶片共用同一个视窗 */
+/* 素材密度直方图：与胶片共用同一个视�?*/
 .density {
   height: 48px;
   margin-bottom: 3px;
@@ -706,7 +722,7 @@ textarea:focus-visible {
 
 .track {
   position: relative;
-  /* 密度条占了 48px，轨道相应收一点，保证镜头列表第一行不被裁 */
+  /* 密度条占�?48px，轨道相应收一点，保证镜头列表第一行不被裁 */
   height: clamp(78px, 10vh, 128px);
   min-height: 78px;
   overflow: hidden;
@@ -822,7 +838,7 @@ textarea:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* 回放条 ------------------------------------------------------------ */
+/* 回放�?------------------------------------------------------------ */
 
 .transport {
   display: grid;
@@ -840,7 +856,7 @@ textarea:focus-visible {
   margin: 0;
   overflow: hidden;
   background: var(--charcoal);
-  /* 剧照卡片：不画外框，只留 1px 内发丝线（§8.8） */
+  /* 剧照卡片：不画外框，只留 1px 内发丝线（�?.8�?*/
   box-shadow: inset 0 0 0 1px rgba(236, 231, 220, 0.06);
 }
 
@@ -939,7 +955,7 @@ textarea:focus-visible {
   --played: 0%;
 }
 
-/* 滑块（§8.2）：2px 轨道、已播放段琥珀 55%、拇指 6px 暖白，拖动时 8px 变琥珀 */
+/* 滑块（�?.2）：2px 轨道、已播放段琥珀 55%、拇�?6px 暖白，拖动时 8px 变琥珀 */
 input[type='range']::-webkit-slider-runnable-track {
   height: 2px;
   border-radius: 1px;
@@ -986,7 +1002,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   white-space: nowrap;
 }
 
-/* 当日汇总 ---------------------------------------------------------- */
+/* 当日汇�?---------------------------------------------------------- */
 
 .summary {
   display: grid;
@@ -1036,7 +1052,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   margin: 0 0 var(--s2);
 }
 
-/* 五列等宽、左对齐；数值不折行（1280 宽下「12 小时 06 分」） */
+/* 五列等宽、左对齐；数值不折行�?280 宽下�?2 小时 06 分」） */
 .metric {
   min-width: 0;
   text-align: left;
@@ -1251,7 +1267,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: 1;
   min-height: 0;
   padding-right: var(--s2);
-  /* overflow-y: auto 会把 overflow-x 带成 auto：显式关掉横向滚动 */
+  /* overflow-y: auto 会把 overflow-x 带成 auto：显式关掉横向滚�?*/
   overflow-x: hidden;
   overflow-y: auto;
 }
@@ -1274,8 +1290,9 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .shot-row {
   height: var(--row-stride);
-  padding-bottom: 1px;
+  padding-bottom: 0;
   box-sizing: border-box;
+  scroll-snap-align: start;
 }
 
 .shot {
@@ -1639,7 +1656,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   }
 }
 
-/* 一周电影 ---------------------------------------------------------- */
+/* 一周电�?---------------------------------------------------------- */
 
 .week-film {
   display: flex;
@@ -1846,7 +1863,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   border: none;
   border-radius: 2px;
   background: #202226;
-  /* 单元格用内发丝线代替 1px 外框（§8.5/§8.8） */
+  /* 单元格用内发丝线代替 1px 外框（�?.5/§8.8�?*/
   box-shadow: inset 0 0 0 1px rgba(236, 231, 220, 0.05);
   cursor: default;
   transition: box-shadow 150ms var(--ease);
@@ -1864,7 +1881,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   box-shadow: inset 0 0 0 1px rgba(236, 231, 220, 0.03);
 }
 
-/* 当天主角：2px 暖白描边，不加光晕 */
+/* 当天主角�?px 暖白描边，不加光�?*/
 .story__cell--protagonist {
   outline: 2px solid #e9ddc6;
   outline-offset: -2px;
@@ -1884,7 +1901,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   cursor: default;
 }
 
-/* 连续主演：2px 短线，线宽恒定 */
+/* 连续主演�?px 短线，线宽恒�?*/
 .story__link {
   position: absolute;
   top: 50%;
@@ -2039,7 +2056,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 /* 放映 -------------------------------------------------------------- */
 
-/* 片头卡：日期 → 题材 → DAYFILM，1.4s 后淡出 ----------------------------------- */
+/* 片头卡：日期 �?题材 �?DAYFILM�?.4s 后淡�?----------------------------------- */
 .titlecard {
   position: fixed;
   inset: 0;
@@ -2292,7 +2309,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   white-space: nowrap;
 }
 
-/* 放映字幕：画面下沿上方 24px，一行，淡入 160ms */
+/* 放映字幕：画面下沿上�?24px，一行，淡入 160ms */
 .projection__subtitle {
   position: absolute;
   bottom: 24px;
@@ -2409,7 +2426,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 @media (max-height: 840px) {
-  /* 低窗口：收紧纵向节奏，把 48px 让给密度条，列表第一行才不被裁 */
+  /* 低窗口：收紧纵向节奏，把 48px 让给密度条，列表第一行才不被�?*/
   #app {
     gap: 8px;
     padding-bottom: 8px;
@@ -2545,7 +2562,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   animation: panel-in 180ms var(--ease);
 }
 
-/* 日历收到内容大小（约 320px），不撑满 */
+/* 日历收到内容大小（约 320px），不撑�?*/
 .overlay__panel--calendar {
   width: auto;
   padding: var(--s4);
@@ -2638,7 +2655,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   height: 100%;
 }
 
-/* 左侧 2px 族色条 */
+/* 左侧 2px 族色�?*/
 .compare__band-bar {
   position: absolute;
   top: 0;
@@ -2699,7 +2716,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   opacity: 0.45;
 }
 
-/* 差值相对谁：10px 小标签，不抢数字 */
+/* 差值相对谁�?0px 小标签，不抢数字 */
 .compare__diff-basis {
   font: 10px/1.3 var(--font-mono);
   letter-spacing: 0.08em;
@@ -2794,7 +2811,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   cursor: default;
 }
 
-/* 没有采样：只留 2px 暗格，与密度直方图同一套语言 */
+/* 没有采样：只�?2px 暗格，与密度直方图同一套语言 */
 .calendar__cell::after {
   content: '';
   position: absolute;
@@ -2826,8 +2843,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 /* ==========================================================================
-   v2.0 主界面（DESIGN.md「胶片脊柱」）：顶栏 56 / hero 7 栏 / 脊柱 88px / 右栏 4 栏
-   ========================================================================== */
+   v2.0 主界面（DESIGN.md「胶片脊柱」）：顶�?56 / hero 7 �?/ 脊柱 88px / 右栏 4 �?   ========================================================================== */
 
 :root {
   --lift: #16181f;
@@ -2897,13 +2913,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   gap: var(--s3);
 }
 
-/* #app 的直系子元素默认不伸缩（v1）——主区必须覆盖 */
+/* #app 的直系子元素默认不伸缩（v1）——主区必须覆�?*/
 #app > .main {
   flex: 1 1 auto;
   min-height: 0;
 }
 
-/* 主区栅格：hero 7 栏 / 脊柱 88px / 右栏 4 栏 ----------------------- */
+/* 主区栅格：hero 7 �?/ 脊柱 88px / 右栏 4 �?----------------------- */
 
 .main {
   display: grid;
@@ -3212,7 +3228,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   overflow-y: auto;
   outline: none;
   cursor: pointer;
-  /* 上下各 24px 渐隐，读起来像一卷真胶片 */
+  /* 上下�?24px 渐隐，读起来像一卷真胶片 */
   -webkit-mask-image: linear-gradient(
     180deg,
     transparent 0,
@@ -3229,7 +3245,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   );
 }
 
-/* 脊柱不要系统滚动条 */
+/* 脊柱不要系统滚动�?*/
 .spine__viewport::-webkit-scrollbar {
   width: 0;
 }
@@ -3281,15 +3297,15 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: none;
   flex-direction: column;
   gap: var(--s2);
-  padding: var(--s4);
+  padding: var(--s3);
   border: 1px solid var(--panel-line);
   background: var(--panel);
 }
 
 .rail__block--grow {
   flex: 1 1 auto;
-  min-height: 120px;
-  padding-bottom: 0;
+  min-height: 0;
+  padding-bottom: 8px;
 }
 
 .rail__head {
@@ -3409,12 +3425,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex: 0 0 auto;
   min-height: 80px;
   padding-right: var(--s2);
-  padding-bottom: 12px;
+  padding-bottom: 8px;
   overflow-x: hidden;
   overflow-y: auto;
+  scroll-snap-type: y mandatory;
 }
 
-/* 表头：10px mono 大写 dim，与行同列 */
+/* 表头�?0px mono 大写 dim，与行同�?*/
 .recent__cols {
   display: grid;
   grid-template-columns: 52px minmax(0, 1fr) 62px 62px;
@@ -3448,11 +3465,11 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .recent .shot {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 62px 62px;
+  grid-template-columns: 72px minmax(0, 1fr) 72px 64px;
   gap: var(--s2);
   align-items: center;
   width: 100%;
-  height: 31px;
+  height: 32px;
   padding: 0;
   border: none;
   border-bottom: 1px solid var(--hairline);
@@ -3460,7 +3477,9 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   color: var(--paper);
   font: 400 11px/1.4 var(--font-ui);
   text-align: left;
+  white-space: nowrap;
   cursor: pointer;
+  scroll-snap-align: start;
 }
 
 .recent .shot:hover {
@@ -3474,6 +3493,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .recent .shot__clock,
 .recent .shot__exe,
 .recent .shot__dur {
+  min-width: 0;
   overflow: hidden;
   font: 400 10px/1.4 var(--font-mono);
   color: rgba(236, 231, 220, 0.5);
@@ -3482,11 +3502,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .recent .shot__dur {
-  font-size: 9px;
+  font-size: 10px;
+  text-align: right;
 }
 
 .recent .shot__title {
   display: flex;
+  min-width: 0;
   gap: var(--s1);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3509,7 +3531,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   text-align: right;
 }
 
-/* 周视图占满主区 ------------------------------------------------------ */
+/* 周视图占满主�?------------------------------------------------------ */
 
 #app[data-mode='week'] .main {
   display: none;
@@ -3522,7 +3544,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   padding: var(--s5);
 }
 
-/* 窄窗口：右栏落到 hero 下方，脊柱保留 ------------------------------- */
+/* 窄窗口：右栏落到 hero 下方，脊柱保�?------------------------------- */
 
 @media (max-width: 1100px) {
   .main {
@@ -3557,7 +3579,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 /* ==========================================================================
-   v2.1 无边框头部 / 自绘下拉 / 输入三态 / 字号规范
+   v2.1 无边框头�?/ 自绘下拉 / 输入三�?/ 字号规范
    ========================================================================== */
 
 /* A. 头部：整条可拖动，控件与按钮 no-drag --------------------------- */
@@ -3640,7 +3662,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   color: var(--ink);
 }
 
-/* B. 自绘下拉框 ------------------------------------------------------ */
+/* B. 自绘下拉�?------------------------------------------------------ */
 
 .select {
   position: relative;
@@ -3670,7 +3692,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   border-bottom-color: rgba(236, 231, 220, 0.3);
 }
 
-/* 触发条自己不要全局 2px 矩形焦点环；键盘操作且未展开时才给 */
+/* 触发条自己不要全局 2px 矩形焦点环；键盘操作且未展开时才�?*/
 .select__trigger:focus-visible {
   outline: none;
 }
@@ -3759,7 +3781,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   width: 100%;
 }
 
-/* C. 输入框三态 ------------------------------------------------------ */
+/* C. 输入框三�?------------------------------------------------------ */
 
 input[type='search'],
 input[type='text'],
@@ -3793,12 +3815,12 @@ textarea.input--error:focus-visible {
   box-shadow: none;
 }
 
-/* 手记是一行输入，保留底线与聚焦微光 */
+/* 手记是一行输入，保留底线与聚焦微�?*/
 .hero__note .note__input {
   padding-left: 12px;
 }
 
-/* D. 字号规范：按钮与次要文字按 13 / 11 / 10 阶梯 ---------------- */
+/* D. 字号规范：按钮与次要文字�?13 / 11 / 10 阶梯 ---------------- */
 
 .btn {
   font-size: 13px;
@@ -3813,4 +3835,139 @@ textarea.input--error:focus-visible {
 .metric__label,
 .hero__window-label {
   font-variant-numeric: tabular-nums;
+}
+
+
+/* ==========================================================================
+   v2.2 细节打磨（impeccable craft floor）
+   ========================================================================== */
+
+/* 字号角色：body 14 / h2 13 / h1 展示 24，保证相邻角色 ≥1.25 的阶梯 */
+body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+h1 {
+  font-size: 24px;
+}
+
+h2 {
+  font-size: 13px;
+}
+
+/* 11) 窗体在深色桌面上留 1px 内描边 */
+#app {
+  box-shadow: inset 0 0 0 1px rgba(236, 231, 220, 0.06);
+}
+
+/* 1) 窗口按钮右侧 8px，按钮之间 2px */
+.topbar {
+  padding-right: 8px;
+}
+
+.winbtns {
+  gap: 2px;
+}
+
+/* 2) 日期触发器固定宽度，切日不抖 */
+.topbar__date .select__trigger {
+  width: 168px;
+}
+
+.topbar__date .select__value {
+  flex: 1 1 auto;
+}
+
+/* 3) hero 空档态：与放映空档一致的两行文案 */
+.hero__frame-still {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background-position: center;
+  background-size: cover;
+}
+
+.hero__frame[data-kind='empty'] .hero__frame-still,
+.hero__frame[data-kind='intermission'] .hero__frame-still {
+  display: none;
+}
+
+.hero__frame-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.hero__frame-empty[hidden] {
+  display: none;
+}
+
+.hero__frame-empty b {
+  font: 400 28px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: rgba(236, 231, 220, 0.55);
+}
+
+.hero__frame-empty span {
+  font: 400 11px/1.5 var(--font-mono);
+  color: rgba(236, 231, 220, 0.32);
+}
+
+/* 4) 「空闲中」是标签不是按钮：4% 底、10px mono 大写、0.12em 字距 */
+.hero__chip[data-state='idle'],
+.hero__chip[data-state='paused'] {
+  padding: 4px var(--s2);
+  background: rgba(236, 231, 220, 0.04);
+  color: var(--paper-dim);
+  font: 10px/1.2 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* 6) 脊柱帧里的字由 canvas 画，容器不再显示 */
+.spine__viewport canvas {
+  image-rendering: auto;
+}
+
+/* 9) 两行的数值右对齐到与三列数字相同的右边界 */
+.stats .metric:last-child .metric__value {
+  text-align: right;
+}
+
+/* 10) 放映时间码：主时间码满亮，/ 24:00:00 降到 55% */
+.player__clock-dim {
+  color: var(--paper);
+  opacity: 0.55;
+}
+
+/* 12) 焦点环：2px 琥珀 + 2px 偏移，补齐到所有可交互元素 */
+.btn:focus-visible,
+.winbtn:focus-visible,
+.mode__btn:focus-visible,
+.speed:focus-visible,
+.shot:focus-visible,
+.pick:focus-visible,
+.arc:focus-visible,
+.story__cell:focus-visible,
+.calendar__cell:focus-visible,
+.week__day:focus-visible,
+.highlight--action:focus-visible,
+.term__remove:focus-visible,
+.project__remove:focus-visible,
+.menu__item:focus-visible,
+.select__option:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* 输入/开关保持底色/底线的聚焦表达，但仍给键盘用户一条可见的环 */
+input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
 }
