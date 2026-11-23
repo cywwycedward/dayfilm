@@ -137,6 +137,116 @@ export function paintDensity(
   }
 }
 
+/** 竖向胶片脊柱（DESIGN §脊柱）：只画可见帧——剧照缩略 + 族色边 + 齿孔 + 密度柱 + 现在线。 */
+import type { SpineFrame } from './lib/spine'
+
+export interface SpinePaintOptions {
+  /** 剧照缩略要的日期与当天镜次 */
+  date: string
+  ordinals: ReadonlyMap<string, number>
+}
+
+export function paintSpine(
+  ctx: CanvasRenderingContext2D,
+  frames: readonly SpineFrame[],
+  range: { start: number; end: number },
+  scrollTop: number,
+  frameH: number,
+  width: number,
+  height: number,
+  now: { y: number; label: string } | null,
+  options: SpinePaintOptions
+): void {
+  // 88px 宽：胶片 60（含左右 2px 族色边）+ 齿孔 4 + 密度柱 24
+  const filmW = 60
+  const sprocketX = filmW
+  const sprocketW = 2
+  const densityX = filmW + sprocketW + 2
+  const subW = 2
+  const subGap = 2
+
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#0a0b0d'
+  ctx.fillRect(0, 0, width, height)
+
+  for (let index = range.start; index < range.end; index += 1) {
+    const frame = frames[index]
+    if (!frame) continue
+    const y = Math.round(index * frameH - scrollTop)
+    if (y > height || y + frameH < 0) continue
+    const filled = frame.scene !== null && frame.hue !== null
+
+    if (filled && frame.scene !== null && frame.hue !== null) {
+      // 左右各 2px 族色边 + 中间的剧照缩略（紧凑帧档）
+      ctx.fillStyle = familyColor(frame.hue, 0.9)
+      ctx.fillRect(0, y + 1, 2, frameH - 2)
+      ctx.fillRect(filmW - 2, y + 1, 2, frameH - 2)
+      drawStill(
+        ctx,
+        frame.scene,
+        options.ordinals.get(frame.scene.id) ?? 0,
+        options.date,
+        2,
+        y + 1,
+        filmW - 4,
+        frameH - 2
+      )
+    } else {
+      // 空档：45° 细斜纹，与放映空档态同一套语言
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(0, y + 1, filmW, frameH - 2)
+      ctx.clip()
+      ctx.strokeStyle = 'rgba(141, 147, 158, 0.10)'
+      ctx.lineWidth = 1
+      for (let offset = -frameH; offset < filmW + frameH; offset += 6) {
+        ctx.beginPath()
+        ctx.moveTo(offset, y + frameH)
+        ctx.lineTo(offset + frameH, y)
+        ctx.stroke()
+      }
+      ctx.restore()
+    }
+
+    // 右侧齿孔带
+    ctx.fillStyle = 'rgba(10, 11, 13, 0.85)'
+    ctx.fillRect(sprocketX, y, sprocketW, frameH - 1)
+    ctx.fillStyle = 'rgba(236, 231, 220, 0.16)'
+    ctx.fillRect(sprocketX, y + Math.round(frameH / 2) - 2, sprocketW, 4)
+
+    // 密度柱：每帧 6 根 2px 小柱（100 秒一格）
+    frame.levels.forEach((level, sub) => {
+      if (level <= 0) return
+      const x = densityX + sub * (subW + subGap)
+      const barH = Math.max(2, Math.round(level * (frameH - 6)))
+      ctx.fillStyle = 'rgba(236, 231, 220, 0.35)'
+      ctx.fillRect(x, y + frameH - 2 - barH, subW, barH)
+    })
+
+    ctx.fillStyle = 'rgba(236, 231, 220, 0.05)'
+    ctx.fillRect(0, y + frameH - 1, width, 1)
+  }
+
+  // 现在：2px 琥珀横线 + 右侧 「现在 HH:MM」
+  if (now !== null) {
+    const y = Math.round(now.y)
+    if (y >= -1 && y <= height + 1) {
+      ctx.fillStyle = 'rgba(232, 180, 90, 0.95)'
+      ctx.fillRect(0, y, width, 2)
+      ctx.font = "400 10px 'Plex Mono', ui-monospace, monospace"
+      ctx.textAlign = 'right'
+      ctx.textBaseline = 'middle'
+      const textW = ctx.measureText(now.label).width
+      ctx.fillStyle = 'rgba(10, 11, 13, 0.92)'
+      ctx.fillRect(width - textW - 6, y - 14, textW + 6, 13)
+      ctx.fillStyle = 'rgba(232, 180, 90, 0.95)'
+      ctx.fillText(now.label, width - 3, y - 8)
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'alphabetic'
+    }
+  }
+}
+
 /** 周视图的一格：24 个小时柱，越活跃越亮。 */
 export function paintWeekBars(
   ctx: CanvasRenderingContext2D,

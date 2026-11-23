@@ -12,41 +12,45 @@
   <body>
     <div id="app">
       <header class="topbar">
-        <div class="brand">
-          <h1 class="brand__mark">DAYFILM</h1>
-          <span class="brand__sub">一天的胶片</span>
-        </div>
-        <div class="controls">
-          <label class="field">
-            <span class="field__label">日期</span>
-            <select id="date"></select>
-          </label>
-          <label class="field field--search">
-            <span class="field__label">检索</span>
-            <input
-              id="search"
-              type="search"
-              placeholder="标题或进程名"
-              autocomplete="off"
-              spellcheck="false"
-            />
-          </label>
-        </div>
+        <h1 class="brand">DAYFILM</h1>
+        <label class="topbar__date">
+          <select id="date" aria-label="日期"></select>
+        </label>
+        <span class="chip" id="chip" data-state="ok"
+          ><i class="chip__dot"></i><span id="chipText">实时记录中</span></span
+        >
+        <label class="topbar__search">
+          <input
+            id="search"
+            type="search"
+            placeholder="搜索镜头、应用、标题…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
         <div class="topbar__end">
-          <button class="btn" id="exportPoster" type="button" aria-haspopup="menu" aria-expanded="false">导出海报</button>
-          <span class="topbar__sep" aria-hidden="true"></span>
-          <button class="btn" id="export" type="button">导出剧本</button>
-          <span class="topbar__sep" aria-hidden="true"></span>
-          <button class="btn" id="exportPdf" type="button">导出 PDF</button>
-          <span class="topbar__sep" aria-hidden="true"></span>
-          <button class="btn" id="exportEdl" type="button">导出 EDL</button>
-          <span class="topbar__sep" aria-hidden="true"></span>
+          <button
+            class="btn"
+            id="exportMenuBtn"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+          >
+            导出
+          </button>
           <button class="btn" id="settings" type="button" aria-haspopup="dialog" aria-expanded="false">
             设置
           </button>
-          <span class="chip" id="chip" data-state="ok"
-            ><i class="chip__dot"></i><span id="chipText">采集正常</span></span
+          <button
+            class="btn btn--icon"
+            id="moreMenuBtn"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-label="更多"
           >
+            ···
+          </button>
         </div>
       </header>
 
@@ -60,136 +64,159 @@
       </div>
       <p class="notice" id="notice" role="status" data-open="false"></p>
 
-      <section class="live">
-        <span class="live__dot" id="liveDot" data-state="idle"></span>
-        <span class="live__text" id="liveText" data-live>空闲中</span>
-        <span class="live__elapsed" id="elapsed">00:00:00</span>
-      </section>
+      <div class="main" id="main">
+        <section class="hero" aria-label="今天">
+          <div class="hero__clapper" aria-hidden="true"></div>
+          <div class="hero__head">
+            <p class="hero__kicker">今天像什么</p>
+            <span class="hero__chip" id="shootingChip" data-state="idle"
+              ><b id="liveText">空闲中</b><em id="elapsed">00:00:00</em></span
+            >
+            <div class="mode" role="group" aria-label="视图模式">
+              <button class="mode__btn is-active" id="modeDay" type="button" aria-pressed="true">日</button>
+              <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
+            </div>
+          </div>
+          <h2 class="hero__genre" id="genre">—</h2>
+          <p class="hero__verdict" id="verdict">—</p>
 
-      <section class="reel">
-        <div class="reel__head">
-          <h2 class="reel__title" id="reelTitle">今日胶片</h2>
-          <span class="reel__hint">← → 选镜头 · 滚轮缩放 · 拖动平移 · 点周格切日</span>
-          <div class="reel__modes" role="group" aria-label="片场视图">
-            <button class="btn btn--quiet" id="compareOpen" type="button" aria-haspopup="dialog">对比</button>
-            <button class="btn btn--quiet" id="calendarOpen" type="button" aria-haspopup="dialog">日历</button>
-          </div>
-          <div class="mode" role="group" aria-label="视图模式">
-            <button class="mode__btn is-active" id="modeDay" type="button" aria-pressed="true">日</button>
-            <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
-          </div>
-          <div class="reel__tools" role="group" aria-label="胶片缩放">
-            <button class="btn btn--icon" id="zoomOut" type="button" aria-label="缩小">−</button>
-            <span class="zoom-level" id="zoomLevel">1x</span>
-            <button class="btn btn--icon" id="zoomIn" type="button" aria-label="放大">+</button>
-            <button class="btn" id="zoomFit" type="button">适配素材</button>
-            <button class="btn" id="zoomReset" type="button">回到全天</button>
-          </div>
-        </div>
+          <p class="hero__window">
+            <span class="hero__window-label">当前窗口</span>
+            <strong id="liveExe">—</strong>
+            <span class="hero__window-title" id="liveTitle"></span>
+          </p>
 
-        <div class="week-film" id="weekFilm" hidden>
-          <div class="week-film__bar">
-            <button class="btn btn--icon" id="weekPrev" type="button" aria-label="上一周">‹</button>
-            <span class="week-film__range" id="weekRange">—</span>
-            <button class="btn btn--icon" id="weekNext" type="button" aria-label="下一周">›</button>
-            <button class="btn" id="weekToday" type="button">本周</button>
-          </div>
-          <div class="week-film__scroll">
-            <section class="arcs" id="weekArcs" aria-label="七日叙事弧"></section>
-            <section class="story" id="storyline" aria-label="故事线"></section>
-            <section class="week-verdict" aria-label="周导演评语">
-              <p class="week-verdict__sentence" id="weekVerdict">—</p>
-              <details class="week-evidence" id="weekEvidence">
-                <summary>证据</summary>
-                <div class="week-evidence__body" id="weekEvidenceBody"></div>
-              </details>
-            </section>
-            <section class="week-picks" id="weekPicks" aria-label="本周精选"></section>
-          </div>
-        </div>
+          <dl class="hero__metrics">
+            <div class="hero__metric">
+              <dt>当前镜头时长</dt>
+              <dd id="metricShot">—</dd>
+            </div>
+            <div class="hero__metric">
+              <dt>最长镜头</dt>
+              <dd id="metricLongest">—</dd>
+            </div>
+            <div class="hero__metric">
+              <dt>项目标签</dt>
+              <dd id="metricProject">—</dd>
+            </div>
+          </dl>
 
-        <div class="week" id="week" role="group" aria-label="最近 7 天"></div>
-        <div class="ruler" id="ruler" aria-hidden="true"></div>
-        <div class="density" id="densityWrap" aria-hidden="true">
-          <canvas id="densityCanvas"></canvas>
-        </div>
-        <div class="track" id="track" tabindex="0" role="group" aria-label="当日胶片，方向键选择镜头">
-          <canvas id="reelCanvas"></canvas>
-          <span class="track__now" id="nowMark" hidden><em>现在</em></span>
-          <span class="track__playhead" id="playhead" hidden></span>
-          <div class="tip" id="tip" hidden></div>
-        </div>
-      </section>
+          <figure class="hero__frame" id="heroFrame" data-kind="empty">
+            <img id="heroStill" alt="" />
+            <span class="hero__frame-tag" id="heroFrameTag" hidden>中场休息</span>
+          </figure>
 
-      <section class="transport">
-        <figure class="frame" id="frameBox" data-kind="empty">
-          <img id="frame" alt="" />
-          <figcaption class="frame__tag" id="frameTag" hidden>中场休息</figcaption>
-        </figure>
-        <div class="nowPlaying">
-          <p class="nowPlaying__title" id="frameTitle">—</p>
-          <p class="nowPlaying__sub" id="frameSub">—</p>
-        </div>
-        <div class="transport__controls">
-          <button class="btn btn--play" id="play" type="button">播放</button>
-          <div class="speeds" role="group" aria-label="回放倍速">
-            <button class="speed" type="button" data-speed="60" aria-pressed="false">60x</button>
-            <button class="speed" type="button" data-speed="600" aria-pressed="false">600x</button>
-            <button class="speed" type="button" data-speed="3600" aria-pressed="false">3600x</button>
-          </div>
-          <input
-            class="scrub"
-            id="scrub"
-            type="range"
-            min="0"
-            max="1439"
-            step="1"
-            value="0"
-            aria-label="回放进度"
-          />
-          <span class="timecode" id="timecode">00:00 / 24:00</span>
-        </div>
-      </section>
-
-      <section class="summary">
-        <div class="genre">
-          <p class="genre__value" id="genre">—</p>
-          <p class="genre__note" id="verdict">—</p>
-          <p class="genre__meta" id="genreMeta">题材</p>
-          <div class="note">
+          <div class="hero__note">
             <textarea
               class="note__input"
               id="note"
-              rows="2"
+              rows="1"
               maxlength="200"
               placeholder="写一句今天的评语…"
             ></textarea>
-            <div class="note__meta">
-              <span class="note__status" id="noteStatus" role="status" data-kind="idle"></span>
-              <span class="note__count" id="noteCount">0/200</span>
+            <span class="note__status" id="noteStatus" role="status" data-kind="idle"></span>
+            <span class="note__count" id="noteCount">0/200</span>
+          </div>
+
+          <section class="highlights" id="highlights" aria-label="今日高光"></section>
+        </section>
+
+        <section class="spine" aria-label="今天的时间">
+          <span class="spine__edge">00:00</span>
+          <div
+            class="spine__viewport"
+            id="spineScroll"
+            tabindex="0"
+            role="group"
+            aria-label="竖向胶片，点击某段定位，滚轮平移时间"
+          >
+            <div class="spine__spacer" id="spineSpacer"></div>
+          </div>
+          <canvas id="spineCanvas" class="spine__canvas"></canvas>
+          <span class="spine__edge spine__edge--end">24:00</span>
+        </section>
+
+        <aside class="rail">
+          <section class="rail__block">
+            <header class="rail__head">
+              <h2>放映</h2>
+              <span>回放今天的工作与生活</span>
+            </header>
+            <div class="player">
+              <button class="player__play" id="play" type="button" aria-label="播放">▶</button>
+              <div class="speeds" role="group" aria-label="回放倍速">
+                <button class="speed" type="button" data-speed="60" aria-pressed="false">60x</button>
+                <button class="speed" type="button" data-speed="600" aria-pressed="false">600x</button>
+                <button class="speed" type="button" data-speed="3600" aria-pressed="false">3600x</button>
+              </div>
             </div>
-          </div>
-        </div>
-        <div class="summary__data">
-          <dl class="metrics" id="metrics"></dl>
-          <div class="ranking" id="ranking"></div>
-          <div class="project-totals" id="projectTotals"></div>
-        </div>
-      </section>
+            <p class="player__clock">
+              <span id="timecode">00:00:00</span><span class="player__clock-dim"> / 24:00:00</span>
+            </p>
+            <input
+              class="scrub"
+              id="scrub"
+              type="range"
+              min="0"
+              max="1439"
+              step="1"
+              value="0"
+              aria-label="回放进度"
+            />
+          </section>
 
-      <section class="highlights" id="highlights" aria-label="今日高光"></section>
+          <section class="rail__block">
+            <header class="rail__head">
+              <h2>今日统计</h2>
+              <span>工作镜头的剪辑摘要</span>
+            </header>
+            <dl class="stats" id="metrics"></dl>
+            <p class="stats__line">
+              <span>最长镜头</span><b id="longestShot">—</b>
+            </p>
+            <p class="stats__line">
+              <span>最长休息</span><b id="longestRest">—</b>
+            </p>
+            <p class="stats__line stats__line--project" id="projectTotals"></p>
+          </section>
 
-      <section class="shots">
-        <div class="shots__head">
-          <h2 id="listTitle">镜头列表</h2>
-          <span class="shots__count" id="listCount"></span>
+          <section class="rail__block rail__block--grow">
+            <header class="rail__head">
+              <h2>最近镜头</h2>
+              <span id="listCount"></span>
+            </header>
+            <div class="recent__cols" aria-hidden="true">
+              <span>时间码</span><span>镜头标题</span><span>进程</span><span>时长</span>
+            </div>
+            <div class="recent" id="listScroll">
+              <div class="recent__spacer" id="listSpacer">
+                <ol class="recent__list" id="list"></ol>
+              </div>
+            </div>
+            <p class="empty" id="empty" hidden>还没有拍摄任何素材</p>
+          </section>
+        </aside>
+      </div>
+
+      <section class="week-film" id="weekFilm" hidden>
+        <div class="week-film__bar">
+          <button class="btn btn--icon" id="weekPrev" type="button" aria-label="上一周">‹</button>
+          <span class="week-film__range" id="weekRange">—</span>
+          <button class="btn btn--icon" id="weekNext" type="button" aria-label="下一周">›</button>
+          <button class="btn" id="weekToday" type="button">本周</button>
         </div>
-        <div class="shots__scroll" id="listScroll">
-          <div class="shots__spacer" id="listSpacer">
-            <ol class="shots__list" id="list"></ol>
-          </div>
+        <div class="week-film__scroll">
+          <section class="arcs" id="weekArcs" aria-label="七日叙事弧"></section>
+          <section class="story" id="storyline" aria-label="故事线"></section>
+          <section class="week-verdict" aria-label="周导演评语">
+            <p class="week-verdict__sentence" id="weekVerdict">—</p>
+            <details class="week-evidence" id="weekEvidence">
+              <summary>证据</summary>
+              <div class="week-evidence__body" id="weekEvidenceBody"></div>
+            </details>
+          </section>
+          <section class="week-picks" id="weekPicks" aria-label="本周精选"></section>
         </div>
-        <p class="empty" id="empty" hidden>还没有拍摄任何素材</p>
       </section>
 
       <div class="titlecard" id="titleCard" hidden aria-hidden="true">
@@ -287,7 +314,21 @@
 
       <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
 
-      <div class="menu" id="posterMenu" role="menu" aria-label="海报主题" hidden></div>
+      <div class="menu" id="exportMenu" role="menu" aria-label="导出" hidden>
+        <p class="menu__label">导出</p>
+        <button class="menu__item" role="menuitem" type="button" id="exportScript">剧本 Markdown</button>
+        <button class="menu__item" role="menuitem" type="button" id="exportPdf">剧本 PDF</button>
+        <button class="menu__item" role="menuitem" type="button" id="exportEdl">CMX3600 EDL</button>
+        <p class="menu__label">海报</p>
+        <button class="menu__item" role="menuitem" type="button" data-theme="classic">经典</button>
+        <button class="menu__item" role="menuitem" type="button" data-theme="noir">黑色电影</button>
+        <button class="menu__item" role="menuitem" type="button" data-theme="minimal">极简</button>
+      </div>
+
+      <div class="menu" id="moreMenu" role="menu" aria-label="更多" hidden>
+        <button class="menu__item" role="menuitem" type="button" id="compareOpen">对比两天</button>
+        <button class="menu__item" role="menuitem" type="button" id="calendarOpen">片场日历</button>
+      </div>
 
       <div class="overlay" id="compare" hidden>
         <div class="overlay__scrim" id="compareScrim"></div>

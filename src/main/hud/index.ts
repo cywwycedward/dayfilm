@@ -2,7 +2,7 @@ import { BrowserWindow, screen } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { HudSettings } from '../../shared/settings'
-import { resolveHudPosition } from './position'
+import { resolveHudPosition, type HudRect } from './position'
 
 /** 规格 R40.1：360×148 的无边框置顶小窗。 */
 export const HUD_WIDTH = 360
@@ -56,12 +56,27 @@ export function createHud(options: HudOptions): HudHandle {
     return { kind: 'file', path: options.hudFile }
   }
 
+  /** 光标所在的显示器（没有光标信息时回主屏）。 */
+  function cursorWorkArea(): HudRect {
+    try {
+      return screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
+    } catch {
+      // 远程会话/无鼠标设备上拿不到光标：回主屏
+      return screen.getPrimaryDisplay().workArea
+    }
+  }
+
   function place(instance: BrowserWindow): void {
     const size = { width: HUD_WIDTH, height: HUD_HEIGHT }
     const workAreas = screen.getAllDisplays().map((display) => display.workArea)
-    const primary = screen.getPrimaryDisplay().workArea
-    const position = resolveHudPosition(options.settings(), size, workAreas, primary)
+    const position = resolveHudPosition(options.settings(), size, workAreas, cursorWorkArea())
     instance.setPosition(position.x, position.y)
+  }
+
+  /** 显示器增减/分辨率变化后重新夹一次（只在 HUD 可见时动作）。 */
+  function reclamp(): void {
+    if (!win || win.isDestroyed() || !win.isVisible()) return
+    place(win)
   }
 
   function ensureWindow(): BrowserWindow | null {
@@ -119,6 +134,11 @@ export function createHud(options: HudOptions): HudHandle {
       win = null
     })
 
+    // 显示器增减、分辨率/缩放变化：把 HUD 重新夹回可见范围（只在可见时生效）
+    screen.on('display-added', reclamp)
+    screen.on('display-removed', reclamp)
+    screen.on('display-metrics-changed', reclamp)
+
     if (target.kind === 'url') void instance.loadURL(target.url)
     else void instance.loadFile(target.path)
 
@@ -141,6 +161,9 @@ export function createHud(options: HudOptions): HudHandle {
       return Boolean(win && !win.isDestroyed() && win.isVisible())
     },
     destroy(): void {
+      screen.removeListener('display-added', reclamp)
+      screen.removeListener('display-removed', reclamp)
+      screen.removeListener('display-metrics-changed', reclamp)
       if (moveTimer) {
         clearTimeout(moveTimer)
         moveTimer = null

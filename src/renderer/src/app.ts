@@ -9,7 +9,7 @@ import {
 import { createSource, type DayfilmSource } from './data'
 import { sceneAt } from './lib/reel'
 import { pickHighlights } from './lib/highlights'
-import { POSTER_THEMES, computePoster, type PosterTheme } from './lib/poster'
+import { computePoster, type PosterTheme } from './lib/poster'
 import {
   compareDays,
   deltaDirection,
@@ -19,7 +19,14 @@ import {
   type CompareSide
 } from './lib/compare-days'
 import { CALENDAR_DAYS, calendarCells, calendarDates, type CalendarCell, type CalendarDay } from './lib/calendar'
-import { buildWeek, lastSevenDates, type WeekCell } from './lib/week'
+import {
+  SPINE_FRAME_H,
+  SPINE_FRAME_MS,
+  spineFrameIndex,
+  spineFrames,
+  spineHeight,
+  visibleSpineFrames
+} from './lib/spine'
 import {
   buildWeekFilm,
   buildWeekVerdict,
@@ -35,20 +42,6 @@ import {
 } from './lib/week-film'
 import { matchProject, totalByProject } from '../../shared/projects'
 import {
-  DAY_MS as DAY_MS_FROM_ZOOM,
-  clampView,
-  ensureVisible,
-  fitView,
-  fullDay,
-  nowLabelSide,
-  layoutInView,
-  offsetInView,
-  ticksInView,
-  zoomAt,
-  zoomLevel,
-  type TimeView
-} from './lib/zoom'
-import {
   fmtClock,
   fmtDateLabel,
   fmtDuration,
@@ -57,14 +50,7 @@ import {
   isoDate,
   startOfDay
 } from './lib/time'
-import {
-  paintCompareStrip,
-  paintDensity,
-  paintPoster,
-  paintReel,
-  paintWeekBars,
-  sizeCanvas
-} from './paint'
+import { paintCompareStrip, paintPoster, paintSpine, sizeCanvas } from './paint'
 import {
   onStillFontsReady,
   paintProjectionBoard,
@@ -75,7 +61,6 @@ import { shotOrdinals } from './lib/still-frame'
 import { hashString } from './lib/hash'
 import { pickNarration, type Narration } from './lib/narration'
 import { TITLE_CARD_MS, shouldPlayTitleCard } from './lib/title-card'
-import { dayDensity, densityBars } from './lib/density'
 import { projectionFrameParams } from './lib/projection-frame'
 import { familyColor } from './lib/still-frame'
 import { exeHue } from './lib/still'
@@ -98,7 +83,7 @@ import {
 import { followDate } from './lib/date-follow'
 import { revealScrollTop, windowRange } from './lib/window'
 
-const DAY_MS = DAY_MS_FROM_ZOOM
+const DAY_MS = 86_400_000
 const SEARCH_LIMIT = 200
 /** 虚拟列表上下各保留的缓冲行数 */
 const OVERSCAN = 5
@@ -132,11 +117,6 @@ interface State {
   browsingHistory: boolean
   /** 已为哪一天补拉过日期列表，避免同一天反复刷*/
   datesRefreshedFor: string | null
-  /** 胶片视窗（缩放与平移*/
-  view: TimeView
-  /** 最7 天的日期与汇总，用于周视*/
-  weekDates: string[]
-  weekDays: (DayRollup | null)[]
   /** 当前日期的导演手*/
   note: string
   noteSaved: string
@@ -163,46 +143,57 @@ interface State {
 interface Ui {
   date: HTMLSelectElement
   search: HTMLInputElement
-  exportBtn: HTMLButtonElement
   chip: HTMLElement
   chipText: HTMLElement
   banner: HTMLElement
   bannerText: HTMLElement
+  storageBanner: HTMLElement
+  storageText: HTMLElement
   notice: HTMLElement
-  liveDot: HTMLElement
+  shootingChip: HTMLElement
   liveText: HTMLElement
   elapsed: HTMLElement
-  reelTitle: HTMLElement
-  ruler: HTMLElement
-  track: HTMLElement
-  canvas: HTMLCanvasElement
-  nowMark: HTMLElement
-  playhead: HTMLElement
-  tip: HTMLElement
-  frameBox: HTMLElement
-  frame: HTMLImageElement
-  frameTag: HTMLElement
-  frameTitle: HTMLElement
-  frameSub: HTMLElement
+  genre: HTMLElement
+  verdict: HTMLElement
+  liveExe: HTMLElement
+  liveTitle: HTMLElement
+  heroFrame: HTMLElement
+  heroStill: HTMLImageElement
+  heroFrameTag: HTMLElement
+  metricShot: HTMLElement
+  metricLongest: HTMLElement
+  metricProject: HTMLElement
+  note: HTMLTextAreaElement
+  noteCount: HTMLElement
+  noteStatus: HTMLElement
+  highlights: HTMLElement
+  spineScroll: HTMLElement
+  spineSpacer: HTMLElement
+  spineCanvas: HTMLCanvasElement
   playBtn: HTMLButtonElement
   speedBtns: HTMLButtonElement[]
   scrub: HTMLInputElement
   timecode: HTMLElement
-  genre: HTMLElement
-  verdict: HTMLElement
-  genreMeta: HTMLElement
   metrics: HTMLElement
-  ranking: HTMLElement
-  listTitle: HTMLElement
+  longestShot: HTMLElement
+  longestRest: HTMLElement
+  projectTotals: HTMLElement
   listCount: HTMLElement
   listScroll: HTMLElement
   spacer: HTMLElement
   list: HTMLElement
   empty: HTMLElement
   announce: HTMLElement
-  storageBanner: HTMLElement
-  storageText: HTMLElement
+  exportMenuBtn: HTMLButtonElement
+  exportMenu: HTMLElement
+  exportScriptBtn: HTMLButtonElement
+  exportPdfBtn: HTMLButtonElement
+  exportEdlBtn: HTMLButtonElement
   settingsBtn: HTMLButtonElement
+  moreMenuBtn: HTMLButtonElement
+  moreMenu: HTMLElement
+  compareOpenBtn: HTMLButtonElement
+  calendarOpenBtn: HTMLButtonElement
   drawer: HTMLElement
   drawerScrim: HTMLElement
   panel: HTMLElement
@@ -217,11 +208,6 @@ interface Ui {
   hudToggle: HTMLInputElement
   quitBtn: HTMLButtonElement
   builtinTerms: HTMLElement
-  exportPosterBtn: HTMLButtonElement
-  exportEdlBtn: HTMLButtonElement
-  exportPdfBtn: HTMLButtonElement
-  posterMenu: HTMLElement
-  compareOpenBtn: HTMLButtonElement
   compare: HTMLElement
   compareScrim: HTMLElement
   compareClose: HTMLButtonElement
@@ -229,29 +215,15 @@ interface Ui {
   compareRight: HTMLElement
   compareChart: HTMLElement
   compareDiff: HTMLElement
-  calendarOpenBtn: HTMLButtonElement
   calendar: HTMLElement
   calendarScrim: HTMLElement
   calendarClose: HTMLButtonElement
   calendarGrid: HTMLElement
   calendarProgress: HTMLElement
-  zoomIn: HTMLButtonElement
-  zoomOut: HTMLButtonElement
-  zoomFit: HTMLButtonElement
-  zoomReset: HTMLButtonElement
-  zoomLevel: HTMLElement
-  density: HTMLElement
-  densityCanvas: HTMLCanvasElement
-  week: HTMLElement
-  note: HTMLTextAreaElement
-  noteCount: HTMLElement
-  noteStatus: HTMLElement
-  projectTotals: HTMLElement
   projectCards: HTMLElement
   projectForm: HTMLFormElement
   projectName: HTMLInputElement
   projectTerms: HTMLInputElement
-  highlights: HTMLElement
   projection: HTMLElement
   projectionStage: HTMLElement
   projectionFrame: HTMLCanvasElement
@@ -288,14 +260,8 @@ interface Ui {
 
 let state!: State
 let ui!: Ui
-let trackWidth = 0
-let trackHeight = 0
-let trackRect: DOMRect | null = null
-let reelKey = ''
 let frameKey = ''
 let timecodeKey = ''
-let lastPlayheadX = -1
-let lastNowX = -1
 let searchTimer = 0
 let noticeTimer = 0
 let rowStride = FALLBACK_ROW_STRIDE
@@ -305,14 +271,11 @@ let windowSignature = ''
 let scrollRaf = 0
 let panelStatusTimer = 0
 let noteTimer = 0
-let drag: { x: number; startMs: number; moved: boolean } | null = null
 let appRoot: HTMLElement | null = null
 let projection: ProjectionState = EMPTY_PROJECTION
 let projectionRaf = 0
 let projectionLast = 0
 let projectionCutsText = ''
-/** 海报主题只记本次会话：重开回经典（R50.5） */
-let posterTheme: PosterTheme = 'classic'
 let compareResult: CompareResult | null = null
 let compareRenderToken = 0
 const projectorAudio = createProjectorAudio()
@@ -364,46 +327,57 @@ function collect(root: HTMLElement): Ui {
   return {
     date: pick<HTMLSelectElement>('date'),
     search: pick<HTMLInputElement>('search'),
-    exportBtn: pick<HTMLButtonElement>('export'),
     chip: pick<HTMLElement>('chip'),
     chipText: pick<HTMLElement>('chipText'),
     banner: pick<HTMLElement>('banner'),
     bannerText: pick<HTMLElement>('bannerText'),
+    storageBanner: pick<HTMLElement>('storageBanner'),
+    storageText: pick<HTMLElement>('storageText'),
     notice: pick<HTMLElement>('notice'),
-    liveDot: pick<HTMLElement>('liveDot'),
+    shootingChip: pick<HTMLElement>('shootingChip'),
     liveText: pick<HTMLElement>('liveText'),
     elapsed: pick<HTMLElement>('elapsed'),
-    reelTitle: pick<HTMLElement>('reelTitle'),
-    ruler: pick<HTMLElement>('ruler'),
-    track: pick<HTMLElement>('track'),
-    canvas: pick<HTMLCanvasElement>('reelCanvas'),
-    nowMark: pick<HTMLElement>('nowMark'),
-    playhead: pick<HTMLElement>('playhead'),
-    tip: pick<HTMLElement>('tip'),
-    frameBox: pick<HTMLElement>('frameBox'),
-    frame: pick<HTMLImageElement>('frame'),
-    frameTag: pick<HTMLElement>('frameTag'),
-    frameTitle: pick<HTMLElement>('frameTitle'),
-    frameSub: pick<HTMLElement>('frameSub'),
+    genre: pick<HTMLElement>('genre'),
+    verdict: pick<HTMLElement>('verdict'),
+    liveExe: pick<HTMLElement>('liveExe'),
+    liveTitle: pick<HTMLElement>('liveTitle'),
+    heroFrame: pick<HTMLElement>('heroFrame'),
+    heroStill: pick<HTMLImageElement>('heroStill'),
+    heroFrameTag: pick<HTMLElement>('heroFrameTag'),
+    metricShot: pick<HTMLElement>('metricShot'),
+    metricLongest: pick<HTMLElement>('metricLongest'),
+    metricProject: pick<HTMLElement>('metricProject'),
+    note: pick<HTMLTextAreaElement>('note'),
+    noteCount: pick<HTMLElement>('noteCount'),
+    noteStatus: pick<HTMLElement>('noteStatus'),
+    highlights: pick<HTMLElement>('highlights'),
+    spineScroll: pick<HTMLElement>('spineScroll'),
+    spineSpacer: pick<HTMLElement>('spineSpacer'),
+    spineCanvas: pick<HTMLCanvasElement>('spineCanvas'),
     playBtn: pick<HTMLButtonElement>('play'),
     speedBtns: [...root.querySelectorAll<HTMLButtonElement>('.speed')],
     scrub: pick<HTMLInputElement>('scrub'),
     timecode: pick<HTMLElement>('timecode'),
-    genre: pick<HTMLElement>('genre'),
-    verdict: pick<HTMLElement>('verdict'),
-    genreMeta: pick<HTMLElement>('genreMeta'),
     metrics: pick<HTMLElement>('metrics'),
-    ranking: pick<HTMLElement>('ranking'),
-    listTitle: pick<HTMLElement>('listTitle'),
+    longestShot: pick<HTMLElement>('longestShot'),
+    longestRest: pick<HTMLElement>('longestRest'),
+    projectTotals: pick<HTMLElement>('projectTotals'),
     listCount: pick<HTMLElement>('listCount'),
     listScroll: pick<HTMLElement>('listScroll'),
     spacer: pick<HTMLElement>('listSpacer'),
     list: pick<HTMLElement>('list'),
     empty: pick<HTMLElement>('empty'),
     announce: pick<HTMLElement>('announce'),
-    storageBanner: pick<HTMLElement>('storageBanner'),
-    storageText: pick<HTMLElement>('storageText'),
+    exportMenuBtn: pick<HTMLButtonElement>('exportMenuBtn'),
+    exportMenu: pick<HTMLElement>('exportMenu'),
+    exportScriptBtn: pick<HTMLButtonElement>('exportScript'),
+    exportPdfBtn: pick<HTMLButtonElement>('exportPdf'),
+    exportEdlBtn: pick<HTMLButtonElement>('exportEdl'),
     settingsBtn: pick<HTMLButtonElement>('settings'),
+    moreMenuBtn: pick<HTMLButtonElement>('moreMenuBtn'),
+    moreMenu: pick<HTMLElement>('moreMenu'),
+    compareOpenBtn: pick<HTMLButtonElement>('compareOpen'),
+    calendarOpenBtn: pick<HTMLButtonElement>('calendarOpen'),
     drawer: pick<HTMLElement>('drawer'),
     drawerScrim: pick<HTMLElement>('drawerScrim'),
     panel: pick<HTMLElement>('panel'),
@@ -418,11 +392,6 @@ function collect(root: HTMLElement): Ui {
     hudToggle: pick<HTMLInputElement>('settingHud'),
     quitBtn: pick<HTMLButtonElement>('quitBtn'),
     builtinTerms: pick<HTMLElement>('builtinTerms'),
-    exportPosterBtn: pick<HTMLButtonElement>('exportPoster'),
-    exportEdlBtn: pick<HTMLButtonElement>('exportEdl'),
-    exportPdfBtn: pick<HTMLButtonElement>('exportPdf'),
-    posterMenu: pick<HTMLElement>('posterMenu'),
-    compareOpenBtn: pick<HTMLButtonElement>('compareOpen'),
     compare: pick<HTMLElement>('compare'),
     compareScrim: pick<HTMLElement>('compareScrim'),
     compareClose: pick<HTMLButtonElement>('compareClose'),
@@ -430,29 +399,15 @@ function collect(root: HTMLElement): Ui {
     compareRight: pick<HTMLElement>('compareRight'),
     compareChart: pick<HTMLElement>('compareChart'),
     compareDiff: pick<HTMLElement>('compareDiff'),
-    calendarOpenBtn: pick<HTMLButtonElement>('calendarOpen'),
     calendar: pick<HTMLElement>('calendar'),
     calendarScrim: pick<HTMLElement>('calendarScrim'),
     calendarClose: pick<HTMLButtonElement>('calendarClose'),
     calendarGrid: pick<HTMLElement>('calendarGrid'),
     calendarProgress: pick<HTMLElement>('calendarProgress'),
-    zoomIn: pick<HTMLButtonElement>('zoomIn'),
-    zoomOut: pick<HTMLButtonElement>('zoomOut'),
-    zoomFit: pick<HTMLButtonElement>('zoomFit'),
-    zoomReset: pick<HTMLButtonElement>('zoomReset'),
-    zoomLevel: pick<HTMLElement>('zoomLevel'),
-    density: pick<HTMLElement>('densityWrap'),
-    densityCanvas: pick<HTMLCanvasElement>('densityCanvas'),
-    week: pick<HTMLElement>('week'),
-    note: pick<HTMLTextAreaElement>('note'),
-    noteCount: pick<HTMLElement>('noteCount'),
-    noteStatus: pick<HTMLElement>('noteStatus'),
-    projectTotals: pick<HTMLElement>('projectTotals'),
     projectCards: pick<HTMLElement>('projectCards'),
     projectForm: pick<HTMLFormElement>('projectForm'),
     projectName: pick<HTMLInputElement>('projectName'),
     projectTerms: pick<HTMLInputElement>('projectTerms'),
-    highlights: pick<HTMLElement>('highlights'),
     projection: pick<HTMLElement>('projection'),
     projectionStage: pick<HTMLElement>('projectionStage'),
     projectionFrame: pick<HTMLCanvasElement>('projectionFrame'),
@@ -488,29 +443,6 @@ function collect(root: HTMLElement): Ui {
   }
 }
 
-function renderRuler(): void {
-  if (trackWidth <= 0) {
-    ui.ruler.replaceChildren()
-    return
-  }
-  const ticks = ticksInView(state.view)
-  const width = trackWidth
-  const dayEnd = dayStart() + DAY_MS
-  ui.ruler.replaceChildren(
-    ...ticks.map((ts) => {
-      const x = offsetInView(ts, state.view, width)
-      // 一天最后一个刻度写24:00，而不是下一天的 00:00
-      const tick = node('span', 'ruler__tick', ts === dayEnd ? '24:00' : fmtClock(ts))
-      tick.style.left = `${Math.min(width, Math.max(0, x))}px`
-      let align = 'mid'
-      if (x < 24) align = 'start'
-      else if (x > width - 24) align = 'end'
-      tick.dataset.align = align
-      return tick
-    })
-  )
-}
-
 function renderDates(): void {
   const today = isoDate(Date.now())
   // 今天可能还没有日文件：即使主进程没返回今天，也要让下拉框里有
@@ -539,26 +471,9 @@ function renderLive(): void {
   const live = state.live
   const captureError = live?.captureError ?? null
   const storageError = live?.storageError ?? null
-  // 用户主动暂停，或子进程没在跑又没报错，都当“已暂停
-const paused = live !== null && (live.paused || (!live.capturing && captureError === null))
+  // 用户主动暂停，或子进程没在跑又没报错，都当“已暂停”
+  const paused = live !== null && (live.paused || (!live.capturing && captureError === null))
   const scene = live?.scene ?? null
-
-  let liveDotState: 'idle' | 'shooting' | 'paused' = 'idle'
-  if (paused) liveDotState = 'paused'
-  else if (scene) liveDotState = 'shooting'
-  ui.liveDot.dataset.state = liveDotState
-  if (paused) {
-    ui.liveText.textContent = '已暂停'
-  } else if (scene) {
-    const exe = node('strong', undefined, scene.exe)
-    ui.liveText.replaceChildren(
-      document.createTextNode('正在拍摄：'),
-      exe,
-      document.createTextNode(` · ${scene.title}`)
-    )
-  } else {
-    ui.liveText.textContent = '空闲中'
-  }
 
   ui.banner.hidden = captureError === null
   ui.bannerText.textContent = captureError ?? ''
@@ -566,51 +481,64 @@ const paused = live !== null && (live.paused || (!live.capturing && captureError
   ui.storageText.textContent = storageError ?? ''
 
   // 采集错误优先于暂停：出错时 chip 必须是红的
-let status: 'ok' | 'paused' | 'error' = 'ok'
+  let status: 'ok' | 'paused' | 'error' = 'ok'
   if (captureError !== null) status = 'error'
   else if (paused) status = 'paused'
   ui.chip.dataset.state = status
-  if (status === 'error') ui.chipText.textContent = '采集中断'
-  else if (status === 'paused') ui.chipText.textContent = '已暂停'
-  else ui.chipText.textContent = '采集正常'
+  ui.chipText.textContent =
+    status === 'error' ? '采集中断' : status === 'paused' ? '已暂停' : '实时记录中'
+
+  // hero 的「正在拍摄」chip
+  const shooting = !paused && scene !== null
+  ui.shootingChip.dataset.state = shooting ? 'shooting' : paused ? 'paused' : 'idle'
+  ui.liveText.textContent = shooting ? '正在拍摄' : paused ? '已暂停' : '空闲中'
+  ui.elapsed.hidden = !shooting
   updateElapsed()
 }
 
 function updateElapsed(): void {
   const live = state.live
   // 暂停时不给“已持续”继续跳：用最后一帧 tick 的时间
-const now = live?.paused === true ? live.now : effectiveNow()
+  const now = live?.paused === true ? live.now : effectiveNow()
   const scene = live?.scene ?? null
   const since = scene ? scene.start : (live?.day.lastAt ?? now)
   ui.elapsed.textContent = fmtElapsed(Math.max(0, now - since))
 }
 
 function measure(): void {
-  const width = ui.track.clientWidth
-  const height = ui.track.clientHeight
   const viewport = ui.listScroll.clientHeight
   const stride = readRowStride()
-  trackRect = null
-  lastPlayheadX = -1
-  lastNowX = -1
-  if (width !== trackWidth || height !== trackHeight) {
-    trackWidth = width
-    trackHeight = height
-    renderReel()
-    renderRuler()
-    updateMarkers()
-  }
   if (viewport !== listViewport || stride !== rowStride) {
     listViewport = viewport
     rowStride = stride
     windowSignature = ''
     renderWindow()
   }
-  // 放映中改窗口尺寸：重画大画面与底部细
-if (projection.active) {
-    paintProjectionFrame(false)
-    paintProjectionStrip()
-    updateProjectionChrome()
+  fitRecentList()
+  paintSpineCanvas()
+}
+
+/** 最近镜头只显示整行（至少 6 行），底部留 12px 内边距，不被面板底边切掉。 */
+const RECENT_MIN_ROWS = 6
+function fitRecentList(): void {
+  const block = ui.listScroll.closest<HTMLElement>('.rail__block')
+  const rail = block?.parentElement
+  if (!block || !rail) return
+  const railH = rail.clientHeight
+  if (railH <= 0) return
+  let others = 0
+  for (const child of rail.children) {
+    if (child !== block) others += (child as HTMLElement).getBoundingClientRect().height
+  }
+  // 块的固定开销（内边距 + 标题 + 表头 + 间隔）；列表高度参与不了，所以量一次就稳定
+  const rawChrome = block.getBoundingClientRect().height - ui.listScroll.getBoundingClientRect().height
+  const chrome = rawChrome > 0 && rawChrome < 160 ? rawChrome : 100
+  const room = Math.max(0, railH - others - 32 - chrome)
+  const rows = Math.max(RECENT_MIN_ROWS, Math.floor(room / rowStride))
+  // 视口高度就是整行高度：12px 内边距由块自身的 padding-bottom 提供，不会露出半行
+  const target = rows * rowStride
+  if (Math.abs(ui.listScroll.getBoundingClientRect().height - target) > 0.5) {
+    ui.listScroll.style.height = `${target}px`
   }
 }
 
@@ -634,97 +562,122 @@ function dayOrdinals(): ReadonlyMap<string, number> {
   return ordinalMap
 }
 
-function paintDensityCanvas(): void {
-  if (trackWidth <= 0) return
-  const height = ui.density.clientHeight
-  if (height <= 0) return
-  const ctx = sizeCanvas(ui.densityCanvas, trackWidth, height)
+function paintSpineCanvas(): void {
+  const canvas = ui.spineCanvas
+  const viewport = ui.spineScroll
+  const width = viewport.clientWidth
+  const height = viewport.clientHeight
+  if (width <= 0 || height <= 0) return
+  const ctx = sizeCanvas(canvas, width, height)
   if (!ctx) return
-  paintDensity(
-    ctx,
-    densityBars(dayDensity(state.day.scenes, dayStart()), state.view, trackWidth, dayStart()),
-    trackWidth,
-    height
-  )
-}
-
-function renderReel(): void {
-  if (trackWidth <= 0 || trackHeight <= 0) return
-  const view = state.view
-  const xOf = (ts: number): number => Math.min(trackWidth, Math.max(0, offsetInView(ts, view, trackWidth)))
-  const first = state.day.firstAt
-  const last = state.day.lastAt
-  const materialStartX = first === null ? trackWidth : xOf(first)
-  const materialEndX = last === null ? 0 : xOf(last)
-  const nowX = state.day.scenes.length > 0 && isToday() ? xOf(effectiveNow()) : -1
-  // 只在胶片真变了才重画：空闲时 tick 不带新镜头，不重
-const key = `${state.selectedId}|${state.day.scenes.length}|${first}|${last}|${Math.round(nowX)}|${Math.round(view.startMs)}|${Math.round(view.spanMs)}|${trackWidth}x${trackHeight}`
-  if (key === reelKey) return
-  reelKey = key
-  const ctx = sizeCanvas(ui.canvas, trackWidth, trackHeight)
-  if (!ctx) return
-  paintReel(ctx, layoutInView(state.day.scenes, view, trackWidth), trackWidth, trackHeight, {
-    selectedId: state.selectedId,
-    materialStartX,
-    materialEndX,
-    nowX,
+  canvas.style.width = `${width}px`
+  canvas.style.height = `${height}px`
+  const scrollTop = viewport.scrollTop
+  const range = visibleSpineFrames(scrollTop, height)
+  const offset = ((state.playhead - dayStart()) / SPINE_FRAME_MS) * SPINE_FRAME_H - scrollTop
+  paintSpine(ctx, spineFrameData(), range, scrollTop, SPINE_FRAME_H, width, height, {
+    y: offset,
+    label: isToday() ? `现在 ${fmtClock(state.playhead)}` : fmtClock(state.playhead)
+  }, {
     date: state.date,
     ordinals: dayOrdinals()
   })
-  paintDensityCanvas()
 }
 
-/** 只写 transform，不读布局；回放时每帧只动这两个指针。视窗外的指针直接隐藏*/
-/** “现在”标签的宽度：量一次后缓存，贴边时向左翻转用。 */
-let nowLabelPx = 0
-function nowLabelWidth(): number {
-  if (nowLabelPx > 0) return nowLabelPx
-  const em = ui.nowMark.querySelector('em')
-  const width = em instanceof HTMLElement ? em.offsetWidth : 0
-  if (width > 0) nowLabelPx = width + 10
-  return nowLabelPx > 0 ? nowLabelPx : 46
+let spineCache: { key: string; frames: ReturnType<typeof spineFrames> } | null = null
+
+function spineFrameData(): ReturnType<typeof spineFrames> {
+  const scenes = state.day.scenes
+  const key = `${state.date}|${scenes.length}|${scenes[scenes.length - 1]?.end ?? 0}`
+  if (spineCache?.key !== key) spineCache = { key, frames: spineFrames(state.day) }
+  return spineCache.frames
 }
 
-function updateMarkers(): void {
-  if (trackWidth <= 0) return
-  const view = state.view
-  const playheadX = offsetInView(state.playhead, view, trackWidth)
-  const playheadVisible = playheadX >= 0 && playheadX <= trackWidth
-  const today = isToday()
-  const nowX = offsetInView(effectiveNow(), view, trackWidth)
-  const nowVisible = today && nowX >= 0 && nowX <= trackWidth
-  if (ui.nowMark.hidden !== !nowVisible) ui.nowMark.hidden = !nowVisible
-  if (nowVisible && Math.abs(nowX - lastNowX) > 0.5) {
-    lastNowX = nowX
-    ui.nowMark.style.transform = `translate3d(${nowX}px,0,0)`
-    ui.nowMark.dataset.side = nowLabelSide(nowX, nowLabelWidth(), trackWidth)
-  }
-  const hidePlayhead = !playheadVisible || (nowVisible && !state.playing && Math.abs(playheadX - nowX) < 1.5)
-  if (ui.playhead.hidden !== hidePlayhead) ui.playhead.hidden = hidePlayhead
-  if (playheadVisible && Math.abs(playheadX - lastPlayheadX) > 0.25) {
-    lastPlayheadX = playheadX
-    ui.playhead.style.transform = `translate3d(${playheadX}px,0,0)`
+/** 滚到某个时刻（放在视口中间），只在看不到时才动。 */
+function revealSpine(ts: number): void {
+  const viewport = ui.spineScroll
+  const height = viewport.clientHeight
+  if (height <= 0) return
+  const y = ((ts - dayStart()) / SPINE_FRAME_MS) * SPINE_FRAME_H
+  const top = viewport.scrollTop
+  if (y < top + 48 || y > top + height - 48) {
+    viewport.scrollTop = Math.max(0, Math.round(y - height / 2))
   }
 }
 
-function renderSummary(): void {
+/** 点脊柱：跳到该 10 分钟内的第一个镜头。 */
+function onSpineClick(event: MouseEvent): void {
+  const viewport = ui.spineScroll
+  const rect = viewport.getBoundingClientRect()
+  const y = event.clientY - rect.top + viewport.scrollTop
+  const index = Math.min(143, Math.max(0, Math.floor(y / SPINE_FRAME_H)))
+  const windowStart = dayStart() + index * SPINE_FRAME_MS
+  const target = state.day.scenes.find(
+    (scene) => scene.kind === 'shot' && scene.start >= windowStart && scene.start < windowStart + SPINE_FRAME_MS
+  )
+  if (target) selectScene(target)
+  else seek(windowStart)
+}
+
+function onSpineKey(event: KeyboardEvent): void {
+  const viewport = ui.spineScroll
+  if (event.key === 'Home') {
+    event.preventDefault()
+    viewport.scrollTop = 0
+  } else if (event.key === 'End') {
+    event.preventDefault()
+    viewport.scrollTop = viewport.scrollHeight
+  } else if (event.key === 'Enter' || event.key === ' ') {
+    event.preventDefault()
+    const index = spineFrameIndex(state.playhead, state.date)
+    const windowStart = dayStart() + index * SPINE_FRAME_MS
+    const target = state.day.scenes.find(
+      (scene) => scene.kind === 'shot' && scene.start >= windowStart && scene.start < windowStart + SPINE_FRAME_MS
+    )
+    if (target) selectScene(target)
+  } else {
+    return
+  }
+  paintSpineCanvas()
+}
+
+function renderHero(): void {
   const day = state.day
   const hasData = day.scenes.length > 0
-  const shots = day.scenes.filter((scene) => scene.kind === 'shot')
   ui.genre.textContent = hasData ? day.verdict.label : '未开镜'
+  ui.genre.dataset.empty = String(!hasData)
   if (hasData) ui.verdict.textContent = day.verdict.note
   else if (isToday()) ui.verdict.textContent = '还没有拍摄任何素材，今天这卷胶片是空的。'
   else ui.verdict.textContent = '这一天没有采样，胶片是空的。'
-  ui.genreMeta.textContent = hasData
-    ? `题材 · 每小时 ${day.verdict.cutRate.toFixed(1)} 次剪辑`
-    : '题材 · 等待第一个镜头'
+}
 
+/** 镜头之间（含中场休息）最长的一段空档，秒。 */
+function longestRestSeconds(day: DayRollup): number {
+  let best = 0
+  for (let index = 1; index < day.scenes.length; index += 1) {
+    const gap = (day.scenes[index].start - day.scenes[index - 1].end) / 1000
+    if (gap > best) best = gap
+  }
+  for (const scene of day.scenes) {
+    if (scene.kind === 'intermission' && scene.seconds > best) best = scene.seconds
+  }
+  return Math.max(0, Math.round(best))
+}
+
+/** 统计区的活跃时长用 HH:MM（DESIGN §右栏：08:41 那种写法）。 */
+function fmtHoursMinutes(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 60_000))
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** 右栏「今日统计」：三项数字 + 最长镜头/最长休息 + 项目一行。 */
+function renderStats(): void {
+  const day = state.day
+  const shots = day.scenes.filter((scene) => scene.kind === 'shot')
   const metrics: [string, string][] = [
-    ['活跃时长', fmtMinutes(day.activeMs)],
-    ['空闲时长', fmtMinutes(day.idleMs)],
-    ['镜头', `${shots.length}`],
-    ['剪辑', `${day.cuts}`],
-    ['最长镜头', day.longestShot ? fmtDuration(day.longestShot.seconds) : '—']
+    ['活跃时长', fmtHoursMinutes(day.activeMs)],
+    ['镜头数', String(shots.length)],
+    ['剪辑数', String(day.cuts)]
   ]
   ui.metrics.replaceChildren(
     ...metrics.map(([label, value]) => {
@@ -733,68 +686,35 @@ function renderSummary(): void {
       return cell
     })
   )
-
-  const peak = day.topApps.reduce((max, app) => Math.max(max, app.seconds), 0)
-  ui.ranking.replaceChildren(
-    ...(day.topApps.length > 0
-      ? day.topApps.map((app) => {
-          const row = node('div', 'rank')
-          const bar = node('span', 'rank__bar')
-          const fill = node('i')
-          fill.style.width = `${peak > 0 ? (app.seconds / peak) * 100 : 0}%`
-          fill.style.background = familyColor(exeHue(app.exe), 0.6)
-          bar.append(fill)
-          row.append(
-            node('span', 'rank__name', app.exe),
-            bar,
-            node('span', 'rank__value', fmtMinutes(app.seconds * 1000))
-          )
-          return row
-        })
-      : [node('p', 'rank rank--empty', '还没有进程时长')])
-  )
-
-  renderProjectTotals(day)
+  const longest = day.longestShot
+  ui.longestShot.textContent = longest
+    ? `${fmtClock(longest.start)} · ${fmtDuration(longest.seconds)}`
+    : '—'
+  ui.metricLongest.textContent = longest ? fmtDuration(longest.seconds) : '—'
+  ui.longestRest.textContent =
+    day.scenes.length === 0 ? '—' : fmtDuration(longestRestSeconds(day))
+  renderProjectLine(day)
 }
 
-/** 汇总面板的项目分区：没有规则时给一句引导，有规则时按命中时长倒序5*/
-function renderProjectTotals(day: DayRollup): void {
+/** 项目汇总一行：按命中时长倒序，最多三项。 */
+function renderProjectLine(day: DayRollup): void {
   const rules = state.settings.projects
   if (rules.length === 0) {
-    ui.projectTotals.replaceChildren(
-      node('p', 'rank rank--empty', '在设置里加一条项目规则，把镜头归到故事线上')
-    )
+    ui.projectTotals.textContent = '项目：在设置里加一条规则'
     return
   }
-  const totals = totalByProject(day.scenes, rules).slice(0, 5)
-  if (totals.length === 0) {
-    ui.projectTotals.replaceChildren(node('p', 'rank rank--empty', '今天没有镜头命中项目规则'))
-    return
-  }
-  const peak = totals[0].ms
-  ui.projectTotals.replaceChildren(
-    ...totals.map((item) => {
-      const row = node('div', 'rank')
-      const bar = node('span', 'rank__bar')
-      const fill = node('i')
-      fill.style.width = `${peak > 0 ? (item.ms / peak) * 100 : 0}%`
-      bar.append(fill)
-      row.append(
-        node('span', 'rank__name', item.name),
-        bar,
-        node('span', 'rank__value', fmtMinutes(item.ms))
-      )
-      return row
-    })
-  )
+  const totals = totalByProject(day.scenes, rules).slice(0, 3)
+  ui.projectTotals.textContent =
+    totals.length === 0
+      ? '项目：今天没有命中'
+      : `项目：${totals.map((item) => `${item.name} ${fmtMinutes(item.ms)}`).join(' · ')}`
 }
 
 function buildRow(
   scene: Scene,
   withDate: boolean,
   index: number,
-  total: number,
-  ordinals: ReadonlyMap<string, number>
+  total: number
 ): HTMLLIElement {
   const item = node('li', 'shot-row')
   item.setAttribute('aria-setsize', String(total))
@@ -803,21 +723,6 @@ function buildRow(
   button.type = 'button'
   button.dataset.id = scene.id
 
-  const thumb = node('span', 'shot__thumb')
-  if (scene.kind === 'shot') {
-    const img = node('img')
-    img.src = stillDataUrl(
-      { exe: scene.exe, title: scene.title, kind: scene.kind },
-      ordinals.get(scene.id) ?? 0,
-      isoDate(scene.start),
-      64,
-      36
-    )
-    img.alt = ''
-    img.loading = 'lazy'
-    thumb.append(img)
-  }
-
   const stamp = withDate ? `${isoDate(scene.start).slice(5)} ` : ''
   const title = scene.kind === 'intermission' ? '离开键盘' : scene.title || '—'
   const titleCell = node('span', 'shot__title')
@@ -825,10 +730,9 @@ function buildRow(
   if (project) titleCell.append(node('span', 'shot__project', project))
   titleCell.append(node('span', 'shot__title-text', title))
   button.append(
-    thumb,
-    node('span', 'shot__clock', `${stamp}${fmtClock(scene.start)}–${fmtClock(scene.end)}`),
-    node('span', 'shot__exe', scene.kind === 'intermission' ? '中场休息' : scene.exe),
+    node('span', 'shot__clock', `${stamp}${fmtClock(scene.start)}`),
     titleCell,
+    node('span', 'shot__exe', scene.kind === 'intermission' ? '中场休息' : scene.exe),
     node('span', 'shot__dur', fmtDuration(scene.seconds))
   )
   button.addEventListener('click', () => {
@@ -848,7 +752,6 @@ function renderList(): void {
   const scenes = visibleScenes()
   const shots = scenes.filter((scene) => scene.kind === 'shot').length
   const rests = scenes.length - shots
-  ui.listTitle.textContent = searching ? '检索结果' : '镜头列表'
   if (searching) {
     ui.listCount.textContent = `${scenes.length} 条${scenes.length >= SEARCH_LIMIT ? '（上限 200）' : ''}`
   } else {
@@ -878,7 +781,7 @@ function renderWindow(): void {
     viewportHeight: listViewport,
     overscan: OVERSCAN
   })
-  ui.spacer.style.height = `${range.totalHeight}px`
+  ui.spacer.style.height = `${range.totalHeight + 12}px`
   ui.list.style.transform = `translate3d(0,${range.offset}px,0)`
   const signature = `${listSignature}|${range.start}|${range.end}`
   if (signature === windowSignature) return
@@ -890,13 +793,7 @@ function renderWindow(): void {
   for (let index = range.start; index < range.end; index += 1) {
     const scene = scenes[index]
     rows.push(
-      buildRow(
-        scene,
-        withDate && isoDate(scene.start) !== today,
-        index,
-        scenes.length,
-        dayOrdinals()
-      )
+      buildRow(scene, withDate && isoDate(scene.start) !== today, index, scenes.length)
     )
   }
   ui.list.replaceChildren(...rows)
@@ -934,51 +831,62 @@ function highlight(): void {
   }
 }
 
+/** 把时刻写成 HH:MM:SS，右栏放映时间码用。 */
+function wallClock(ts: number): string {
+  const date = new Date(ts)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`
+}
+
+/** 把播放头写到 hero（剧照/当前窗口/当前镜头）与右栏（时间码/进度条）。 */
 function updateTransport(): void {
   const scene = sceneAt(state.playhead, state.day.scenes)
-  if (scene) {
-    if (scene.id !== frameKey) {
-      frameKey = scene.id
-      const intermission = scene.kind === 'intermission'
-      ui.frameBox.dataset.kind = intermission ? 'intermission' : 'shot'
-      ui.frameTag.hidden = !intermission
-      if (intermission) ui.frame.removeAttribute('src')
-      else {
-        ui.frame.src = stillDataUrl(
-          { exe: scene.exe, title: scene.title, kind: scene.kind },
-          dayOrdinals().get(scene.id) ?? 0,
-          isoDate(scene.start),
-          128,
-          72
-        )
-      }
-      ui.frameTitle.textContent = intermission ? '中场休息' : scene.title
-      ui.frameSub.textContent = intermission
-        ? `${fmtClock(scene.start)}–${fmtClock(scene.end)} · ${fmtDuration(scene.seconds)}`
-        : `${scene.exe} · ${fmtClock(scene.start)}–${fmtClock(scene.end)} · ${fmtDuration(scene.seconds)}`
-    }
-  } else {
-    // 指针落在没有镜头的时段：既不冒充上一个镜头，也不冒充空白的一
-const next = state.day.scenes.find((item) => item.start > state.playhead) ?? null
-    const key = `gap:${next?.id ?? 'end'}:${state.day.scenes.length}`
-    if (key !== frameKey) {
-      frameKey = key
-      ui.frameBox.dataset.kind = 'empty'
-      ui.frameTag.hidden = true
-      ui.frame.removeAttribute('src')
-      if (state.day.scenes.length === 0) {
-        ui.frameTitle.textContent = emptyCopy()
-        ui.frameSub.textContent = isToday() ? '胶片是空的' : '这一天没有记录'
-      } else {
-        ui.frameTitle.textContent = '空档'
-        ui.frameSub.textContent = next
-          ? `没有采样 · 下一个镜头 ${fmtClock(next.start)}`
-          : '这一天的胶片到此结束'
-      }
+  const intermission = scene?.kind === 'intermission'
+  const key = scene
+    ? `${scene.id}|${dayOrdinals().size}`
+    : `gap:${state.day.scenes.length}:${state.day.scenes.find((item) => item.start > state.playhead)?.id ?? 'end'}`
+
+  if (key !== frameKey) {
+    frameKey = key
+    if (scene && !intermission) {
+      ui.heroFrame.dataset.kind = 'shot'
+      ui.heroFrameTag.hidden = true
+      ui.heroStill.src = stillDataUrl(
+        { exe: scene.exe, title: scene.title, kind: scene.kind },
+        dayOrdinals().get(scene.id) ?? 0,
+        isoDate(scene.start),
+        720,
+        280
+      )
+    } else {
+      ui.heroFrame.dataset.kind = intermission ? 'intermission' : 'empty'
+      ui.heroFrameTag.hidden = !intermission
+      ui.heroFrameTag.textContent = intermission ? '中场休息' : ''
+      ui.heroStill.removeAttribute('src')
     }
   }
 
-  // 进度条只跨素材区间，标签仍显示真实时刻
+  // 当前窗口：拍摄中显示进程 — 标题，空档写明
+  if (scene) {
+    ui.liveExe.textContent = intermission ? '中场休息' : scene.exe || '—'
+    ui.liveTitle.textContent = intermission ? '' : scene.title
+  } else {
+    const next = state.day.scenes.find((item) => item.start > state.playhead)
+    ui.liveExe.textContent = state.day.scenes.length === 0 ? '—' : '空档'
+    ui.liveTitle.textContent =
+      state.day.scenes.length === 0
+        ? emptyCopy()
+        : next
+          ? `没有采样 · 下一镜 ${fmtClock(next.start)}`
+          : '这一天的胶片到此结束'
+  }
+
+  // 当前镜头时长 / 项目标签
+  ui.metricShot.textContent = scene ? fmtElapsed(scene.seconds * 1000) : '—'
+  const project =
+    scene && scene.kind === 'shot' ? matchProject(scene, state.settings.projects) : null
+  ui.metricProject.textContent = project ?? '—'
+
+  // 进度条只跨素材区间，时间码仍显示真实时刻
   const material = playbackRange(state.day.scenes)
   const min = material ? Math.max(0, Math.floor((material.start - dayStart()) / 60_000)) : 0
   const max = material ? Math.max(min + 1, Math.ceil((material.end - dayStart()) / 60_000)) : 1440
@@ -987,10 +895,10 @@ const next = state.day.scenes.find((item) => item.start > state.playhead) ?? nul
   const minuteValue = Math.round((state.playhead - dayStart()) / 60_000)
   const minutes = String(minuteValue)
   if (ui.scrub.value !== minutes) ui.scrub.value = minutes
-  // 已播放段：轨道渐变用（§8.2），只在这里写一次
   const played = max > min ? Math.min(1, Math.max(0, (minuteValue - min) / (max - min))) : 0
   ui.scrub.style.setProperty('--played', `${(played * 100).toFixed(1)}%`)
-  const code = `${fmtClock(state.playhead)} / 24:00`
+
+  const code = wallClock(state.playhead)
   if (code !== timecodeKey) {
     timecodeKey = code
     ui.timecode.textContent = code
@@ -998,14 +906,13 @@ const next = state.day.scenes.find((item) => item.start > state.playhead) ?? nul
 }
 
 function renderDay(): void {
-  ui.reelTitle.textContent = isToday() ? '今日胶片' : '当日胶片'
-  renderReel()
-  renderSummary()
+  renderHero()
+  renderStats()
   renderHighlights()
   renderList()
   highlight()
-  updateMarkers()
   updateTransport()
+  paintSpineCanvas()
 }
 
 function announce(message: string): void {
@@ -1021,14 +928,20 @@ function toast(message: string): void {
   }, 6000)
 }
 
+/** 主按钮只有播放/暂停两个面，用符号保持 40×40 的方形。 */
+function setPlayButton(playing: boolean): void {
+  state.playing = playing
+  ui.playBtn.textContent = playing ? '❚❚' : '▶'
+  ui.playBtn.dataset.state = playing ? 'playing' : 'paused'
+  ui.playBtn.setAttribute('aria-label', playing ? '暂停' : '播放')
+}
+
 function pause(): void {
   if (projection.active) {
     stopProjection()
     return
   }
-  state.playing = false
-  ui.playBtn.textContent = '播放'
-  ui.playBtn.dataset.state = 'paused'
+  setPlayButton(false)
 }
 
 /* 放映：进入后才算“播放”，胶片收细、中央放大画---------------------------------- */
@@ -1255,15 +1168,10 @@ function stopProjection(): void {
   projectorAudio.dispose()
   ui.projection.hidden = true
   state.playing = false
-  ui.playBtn.textContent = '播放'
-  ui.playBtn.dataset.state = 'paused'
+  setPlayButton(false)
   state.playhead = Math.min(dayEnd(), Math.max(dayStart(), endedAt))
-  lastPlayheadX = -1
-  lastNowX = -1
-  renderReel()
-  renderRuler()
-  updateMarkers()
   updateTransport()
+  paintSpineCanvas()
 }
 
 function projectionStep(now: number): void {
@@ -1289,8 +1197,8 @@ function togglePlay(): void {
 
 function seek(ts: number): void {
   state.playhead = Math.min(dayEnd(), Math.max(dayStart(), ts))
-  updateMarkers()
   updateTransport()
+  paintSpineCanvas()
 }
 
 function announceScene(prefix: string, scene: Scene): void {
@@ -1302,16 +1210,10 @@ function selectScene(scene: Scene): void {
   state.selectedId = scene.id
   pause()
   state.playhead = Math.min(dayEnd(), Math.max(dayStart(), scene.start))
-  // 选中镜头一定要在视窗里，缩放后也一
-state.view = ensureVisible(state.view, scene.start, scene.end, dayStart())
-  lastPlayheadX = -1
-  lastNowX = -1
-  renderReel()
-  renderRuler()
-  updateZoomLevel()
+  revealSpine(scene.start)
   highlight()
-  updateMarkers()
   updateTransport()
+  paintSpineCanvas()
   announceScene('已选镜头', scene)
 }
 
@@ -1319,6 +1221,25 @@ function openDetail(scene: Scene): void {
   const row = revealRow(scene.id, 'center')
   row?.focus({ preventScroll: true })
   announceScene('镜头详情', scene)
+}
+
+/** 镜头表键盘导航：↑↓ 选镜头，Enter 聚焦选中行。 */
+function onListKey(event: KeyboardEvent): void {
+  const scenes = state.day.scenes
+  if (scenes.length === 0) return
+  const index = scenes.findIndex((scene) => scene.id === state.selectedId)
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault()
+    const step = event.key === 'ArrowDown' ? 1 : -1
+    const next = index < 0 ? 0 : Math.min(scenes.length - 1, Math.max(0, index + step))
+    selectScene(scenes[next])
+    revealRow(scenes[next].id, 'nearest')
+    return
+  }
+  if (event.key === 'Enter' && index >= 0) {
+    event.preventDefault()
+    openDetail(scenes[index])
+  }
 }
 
 async function locate(scene: Scene): Promise<void> {
@@ -1346,12 +1267,10 @@ renderDates()
   state.day = await state.source.getDay(date)
   state.selectedId = null
   pause()
-  state.view = fullDay(startOfDay(date))
   state.playhead = initialPlayhead()
   resetListScroll()
   frameKey = ''
   timecodeKey = ''
-  reelKey = ''
   // 手记先清空再载入，不能把上一天的内容留在框里
   window.clearTimeout(noteTimer)
   state.note = ''
@@ -1360,159 +1279,16 @@ renderDates()
   updateNoteMeta()
   setNoteStatus('idle', '')
   renderDay()
-  renderRuler()
-  updateZoomLevel()
+  ui.spineScroll.scrollTop = 0
+  revealSpine(state.playhead)
+  paintSpineCanvas()
   void loadNote(date)
-  renderWeek()
   if (state.mode === 'day') playTitleCard()
 }
 
 /** 空状态的文案：今天还没素材和历史某天没采样是两件事*/
 function emptyCopy(): string {
   return isToday() ? '还没有拍摄任何素材' : '这一天没有采样'
-}
-
-function hideTip(): void {
-  ui.tip.hidden = true
-}
-
-function timeAtClientX(clientX: number): number {
-  const rect = trackRect ?? ui.track.getBoundingClientRect()
-  trackRect = rect
-  if (rect.width <= 0) return state.view.startMs
-  const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width))
-  return state.view.startMs + ratio * state.view.spanMs
-}
-
-function applyView(next: TimeView): void {
-  state.view = clampView(next, dayStart())
-  lastPlayheadX = -1
-  lastNowX = -1
-  renderReel()
-  renderRuler()
-  updateMarkers()
-  updateZoomLevel()
-}
-
-function zoomBy(factor: number, anchorMs?: number): void {
-  const anchor = anchorMs ?? state.view.startMs + state.view.spanMs / 2
-  applyView(zoomAt(state.view, factor, anchor, dayStart()))
-}
-
-function updateZoomLevel(): void {
-  const level = zoomLevel(state.view)
-  ui.zoomLevel.textContent = `${level < 1.05 ? 1 : Math.round(level)}x`
-  ui.zoomOut.disabled = state.view.spanMs >= DAY_MS
-  ui.zoomIn.disabled = state.view.spanMs <= 30 * 60_000
-  ui.zoomReset.disabled = state.view.spanMs >= DAY_MS
-}
-
-function onWheel(event: WheelEvent): void {
-  event.preventDefault()
-  // 每次重读几何：窗口变窄或出现滚动条后缓存的矩形会偏，锚点会漂
-  const rect = ui.track.getBoundingClientRect()
-  trackRect = rect
-  if (rect.width <= 0) return
-  const ratio = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width))
-  const anchor = state.view.startMs + ratio * state.view.spanMs
-  const factor = Math.exp(-event.deltaY * 0.0016)
-  zoomBy(factor, anchor)
-  hideTip()
-}
-
-function onHover(event: PointerEvent): void {
-  if (drag?.moved) {
-    hideTip()
-    return
-  }
-  const rect = trackRect ?? ui.track.getBoundingClientRect()
-  trackRect = rect
-  if (rect.width <= 0) return
-  const scene = sceneAt(timeAtClientX(event.clientX), state.day.scenes)
-  if (!scene) {
-    hideTip()
-    return
-  }
-  const offsetX = Math.min(160, rect.width / 2)
-  const offset = Math.min(rect.width - offsetX, Math.max(offsetX, event.clientX - rect.left))
-  ui.tip.style.transform = `translate3d(${offset}px,0,0)`
-  ui.tip.replaceChildren(
-    node('span', 'tip__title', scene.kind === 'intermission' ? '中场休息' : scene.title),
-    node(
-      'span',
-      'tip__meta',
-      `${fmtClock(scene.start)}–${fmtClock(scene.end)} · ${fmtDuration(scene.seconds)}`
-    )
-  )
-  ui.tip.hidden = false
-}
-
-function onTrackPointerDown(event: PointerEvent): void {
-  if (event.button !== 0) return
-  trackRect = ui.track.getBoundingClientRect()
-  drag = { x: event.clientX, startMs: state.view.startMs, moved: false }
-  ui.track.setPointerCapture(event.pointerId)
-}
-
-function onTrackPointerMove(event: PointerEvent): void {
-  if (!drag) return
-  const dx = event.clientX - drag.x
-  if (!drag.moved && Math.abs(dx) <= 3) return
-  drag.moved = true
-  ui.track.dataset.dragging = 'true'
-  const width = trackWidth > 0 ? trackWidth : 1
-  applyView({ startMs: drag.startMs - (dx / width) * state.view.spanMs, spanMs: state.view.spanMs })
-}
-
-function onTrackPointerUp(event: PointerEvent): void {
-  if (!drag) return
-  const moved = drag.moved
-  drag = null
-  delete ui.track.dataset.dragging
-  if (ui.track.hasPointerCapture(event.pointerId)) ui.track.releasePointerCapture(event.pointerId)
-  if (moved) return
-  const time = timeAtClientX(event.clientX)
-  const scene = sceneAt(time, state.day.scenes)
-  if (scene) selectScene(scene)
-  else {
-    pause()
-    seek(time)
-  }
-}
-
-function onTrackKey(event: KeyboardEvent): void {
-  const scenes = state.day.scenes
-  if (scenes.length === 0) return
-  const index = scenes.findIndex((scene) => scene.id === state.selectedId)
-  switch (event.key) {
-    case 'ArrowRight':
-      event.preventDefault()
-      selectScene(scenes[index < 0 ? 0 : Math.min(scenes.length - 1, index + 1)])
-      return
-    case 'ArrowLeft':
-      event.preventDefault()
-      selectScene(scenes[index < 0 ? scenes.length - 1 : Math.max(0, index - 1)])
-      return
-    case 'Home':
-      event.preventDefault()
-      selectScene(scenes[0])
-      return
-    case 'End':
-      event.preventDefault()
-      selectScene(scenes[scenes.length - 1])
-      return
-    case 'Enter':
-      if (index >= 0) {
-        event.preventDefault()
-        openDetail(scenes[index])
-      }
-      return
-    case ' ':
-      event.preventDefault()
-      togglePlay()
-      return
-    default:
-  }
 }
 
 function setSpeed(speed: Speed): void {
@@ -1527,14 +1303,11 @@ if (projection.active) projection = setProjectionSpeed(projection, speed)
 }
 
 async function exportDay(): Promise<void> {
-  ui.exportBtn.disabled = true
   try {
     const path = await state.source.exportScreenplay(state.date)
     toast(`剧本已导出：${path}`)
   } catch (error) {
     toast(`导出失败：${error instanceof Error ? error.message : String(error)}`)
-  } finally {
-    ui.exportBtn.disabled = false
   }
 }
 
@@ -1590,10 +1363,7 @@ function handleTick(live: LiveState): void {
   if (live.day.date === state.date) {
     state.day = live.day
     renderDay()
-  } else {
-    updateMarkers()
   }
-  renderWeek()
   if (state.mode === 'week') refreshWeekFilm()
   void syncSettingsFromHost()
 }
@@ -1626,7 +1396,7 @@ async function syncSettingsFromHost(): Promise<void> {
 function applyExternalSettings(next: Settings): void {
   state.settings = next
   renderSettings()
-  renderSummary()
+  renderStats()
   // 项目标签依赖规则，列表要整份重算
   listSignature = ''
   windowSignature = ''
@@ -1687,7 +1457,7 @@ async function loadSettings(): Promise<void> {
     state.settingsReady = true
     renderSettings()
     // 项目规则影响汇总与列表标签，读回来就要重算
-    renderSummary()
+    renderStats()
     listSignature = ''
     windowSignature = ''
     renderList()
@@ -1721,7 +1491,7 @@ async function applySettings(patch: Partial<Settings>): Promise<boolean> {
     if (patch.projects !== undefined) {
       listSignature = ''
       windowSignature = ''
-      renderSummary()
+      renderStats()
       renderList()
       refreshWeekIfVisible()
     }
@@ -1829,75 +1599,7 @@ function onListScroll(): void {
   })
 }
 
-/* 周视------------------------------------------------------------- */
-
-let weekSignature = ''
-
-/** 周视图：最7 天的 24 桶迷你条；今天优先用实时数据*/
-function renderWeek(): void {
-  if (state.weekDates.length === 0) {
-    ui.week.replaceChildren()
-    return
-  }
-  const today = isoDate(Date.now())
-  const days = [...state.weekDays]
-  if (state.live !== null) {
-    const index = state.weekDates.indexOf(today)
-    if (index >= 0) days[index] = state.live.day
-  }
-  const cells = buildWeek(state.weekDates, days, today)
-  const signature = `${cells.map((cell) => `${cell.date}:${cell.isToday ? 1 : 0}`).join('|')}|${state.date}`
-  if (signature !== weekSignature) {
-    weekSignature = signature
-    ui.week.replaceChildren(...cells.map((cell) => weekCellNode(cell)))
-  }
-  paintWeek(cells)
-}
-
-function weekCellNode(cell: WeekCell): HTMLElement {
-  const button = node('button', 'week__day')
-  button.type = 'button'
-  button.dataset.date = cell.date
-  button.classList.toggle('is-active', cell.date === state.date)
-  button.classList.toggle('is-selected', cell.date === state.date)
-  button.classList.toggle('is-today', cell.isToday)
-  button.setAttribute('aria-pressed', String(cell.date === state.date))
-  if (cell.date === state.date) button.setAttribute('aria-current', 'date')
-  const label = fmtDateLabel(cell.date, isoDate(Date.now())).replace('今天 · ', '')
-  button.setAttribute('aria-label', `${label}${cell.hasData ? '，有记录' : '，无记录'}`)
-  const canvas = node('canvas', 'week__bars')
-  canvas.width = 192
-  canvas.height = 44
-  button.append(canvas, node('span', 'week__label', label))
-  return button
-}
-
-function paintWeek(cells: WeekCell[]): void {
-  const canvases = ui.week.querySelectorAll<HTMLCanvasElement>('canvas.week__bars')
-  cells.forEach((cell, index) => {
-    const canvas = canvases[index]
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
-    paintWeekBars(ctx, cell.buckets, canvas.width, canvas.height)
-  })
-}
-
-async function loadStripWeek(): Promise<void> {
-  const today = isoDate(Date.now())
-  const dates = lastSevenDates(today)
-  const known = new Set(state.dates)
-  state.weekDates = dates
-  state.weekDays = await Promise.all(
-    dates.map((date) => {
-      if (date === today && state.live !== null) return Promise.resolve(state.live.day)
-      if (!known.has(date)) return Promise.resolve(null)
-      return state.source.getDay(date).catch(() => null)
-    })
-  )
-  weekSignature = ''
-  renderWeek()
-}
+/* 周模式：日视图与周电影互斥 --------------------------------------- */
 
 /** 换到某一天：退出检索、回到列表顶部、重置视窗*/
 async function selectDay(date: string): Promise<void> {
@@ -2020,7 +1722,6 @@ async function exportPoster(theme: PosterTheme): Promise<void> {
     toast('当天还没有素材，无法导出海报')
     return
   }
-  ui.exportPosterBtn.disabled = true
   try {
     const layout = computePoster({
       day: state.day,
@@ -2039,8 +1740,6 @@ async function exportPoster(theme: PosterTheme): Promise<void> {
     toast(path.length > 0 ? `海报已导出：${path}` : '已取消导出海报')
   } catch (error) {
     toast(`海报导出失败：${messageOf(error)}`)
-  } finally {
-    ui.exportPosterBtn.disabled = false
   }
 }
 
@@ -2080,60 +1779,54 @@ async function exportPdfNow(): Promise<void> {
   }
 }
 
-/* 海报主题菜单（R50）----------------------------------------------------*/
+/* 顶栏菜单：导出 / 更多 -----------------------------------------------*/
 
-/** 菜单项来自 POSTER_THEMES，文案不在这里另写一份。 */
-function buildPosterMenu(): void {
-  const label = node('p', 'menu__label', '海报主题')
-  const items = POSTER_THEMES.map((theme) => {
-    const item = node('button', 'menu__item', theme.label)
-    item.type = 'button'
-    item.dataset.theme = theme.id
-    item.setAttribute('role', 'menuitem')
-    return item
-  })
-  ui.posterMenu.replaceChildren(label, ...items)
+let openMenuPanel: HTMLElement | null = null
+let openMenuAnchor: HTMLButtonElement | null = null
+
+function closeMenus(): void {
+  if (openMenuPanel === null) return
+  openMenuPanel.hidden = true
+  openMenuAnchor?.setAttribute('aria-expanded', 'false')
+  openMenuPanel = null
+  openMenuAnchor = null
 }
 
-function openPosterMenu(): void {
-  const rect = ui.exportPosterBtn.getBoundingClientRect()
-  ui.posterMenu.hidden = false
-  ui.exportPosterBtn.setAttribute('aria-expanded', 'true')
-  const width = ui.posterMenu.offsetWidth
-  const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))
-  ui.posterMenu.style.left = `${left}px`
-  ui.posterMenu.style.top = `${rect.bottom + 6}px`
-  ui.posterMenu.querySelector<HTMLElement>('.menu__item')?.focus()
+function showMenu(panel: HTMLElement, anchor: HTMLButtonElement): void {
+  closeMenus()
+  panel.hidden = false
+  anchor.setAttribute('aria-expanded', 'true')
+  const rect = anchor.getBoundingClientRect()
+  const width = panel.offsetWidth
+  panel.style.left = `${Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))}px`
+  panel.style.top = `${rect.bottom + 6}px`
+  panel.querySelector<HTMLElement>('.menu__item')?.focus()
+  openMenuPanel = panel
+  openMenuAnchor = anchor
 }
 
-function togglePosterMenu(): void {
-  if (ui.posterMenu.hidden) openPosterMenu()
-  else closePosterMenu()
+function toggleMenu(panel: HTMLElement, anchor: HTMLButtonElement): void {
+  if (openMenuPanel === panel) closeMenus()
+  else showMenu(panel, anchor)
 }
 
-function closePosterMenu(): void {
-  if (ui.posterMenu.hidden) return
-  ui.posterMenu.hidden = true
-  ui.exportPosterBtn.setAttribute('aria-expanded', 'false')
-}
-
-/** Esc 关菜单、上下键在主题之间移焦点（菜单是 role=menu）。 */
-function onPosterMenuKey(event: KeyboardEvent): void {
-  if (ui.posterMenu.hidden) return
+/** 菜单内键盘：Esc 关闭、↑↓ 在项目之间移焦点。 */
+function onMenuKey(event: KeyboardEvent): void {
+  if (openMenuPanel === null) return
   if (event.key === 'Escape') {
     event.preventDefault()
-    closePosterMenu()
-    ui.exportPosterBtn.focus({ preventScroll: true })
+    const anchor = openMenuAnchor
+    closeMenus()
+    anchor?.focus({ preventScroll: true })
     return
   }
   if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
-  const items = [...ui.posterMenu.querySelectorAll<HTMLElement>('.menu__item')]
+  const items = [...openMenuPanel.querySelectorAll<HTMLElement>('.menu__item')]
   if (items.length === 0) return
   event.preventDefault()
   const index = items.indexOf(document.activeElement as HTMLElement)
   const step = event.key === 'ArrowDown' ? 1 : -1
-  const next = (index + step + items.length) % items.length
-  items[next]?.focus()
+  items[(index + step + items.length) % items.length]?.focus()
 }
 
 /* 双日对比（R51）--------------------------------------------------------*/
@@ -2561,10 +2254,9 @@ function setMode(mode: 'day' | 'week'): void {
     void loadWeekFilm()
     return
   }
-  // 回到日模式：胶片刚重新可见，重新量一次尺寸再
-measure()
-  renderRuler()
-  updateMarkers()
+  // 回到日模式：胶片刚重新可见，重新量一次尺寸再画
+  measure()
+  paintSpineCanvas()
 }
 
 /** 周模式下点任何镜头：切回日模式、载入该天、选中该镜头*/
@@ -2795,8 +2487,42 @@ ui.search.value = ''
     void loadDate(ui.date.value)
   })
   ui.search.addEventListener('input', scheduleSearch)
-  ui.exportBtn.addEventListener('click', () => {
+  // 顶栏菜单：导出（脚本/PDF/EDL/海报三主题）与「···」（对比/日历）
+  ui.exportMenuBtn.addEventListener('click', () => toggleMenu(ui.exportMenu, ui.exportMenuBtn))
+  ui.moreMenuBtn.addEventListener('click', () => toggleMenu(ui.moreMenu, ui.moreMenuBtn))
+  ui.exportMenu.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const item = target.closest<HTMLElement>('[data-theme]')
+    const theme = item?.dataset.theme
+    if (theme !== 'classic' && theme !== 'noir' && theme !== 'minimal') return
+    closeMenus()
+    void exportPoster(theme)
+  })
+  ui.exportMenu.addEventListener('keydown', onMenuKey)
+  ui.moreMenu.addEventListener('keydown', onMenuKey)
+  ui.exportScriptBtn.addEventListener('click', () => {
+    closeMenus()
     void exportDay()
+  })
+  ui.exportPdfBtn.addEventListener('click', () => {
+    closeMenus()
+    void exportPdfNow()
+  })
+  ui.exportEdlBtn.addEventListener('click', () => {
+    closeMenus()
+    void exportEdlNow()
+  })
+  document.addEventListener('pointerdown', (event) => {
+    if (openMenuPanel === null) return
+    const target = event.target
+    if (
+      target instanceof Node &&
+      (openMenuPanel.contains(target) || (openMenuAnchor?.contains(target) ?? false))
+    ) {
+      return
+    }
+    closeMenus()
   })
   ui.playBtn.addEventListener('click', togglePlay)
   for (const button of ui.speedBtns) {
@@ -2809,20 +2535,17 @@ ui.search.value = ''
     pause()
     seek(dayStart() + Number(ui.scrub.value) * 60_000)
   })
-  ui.track.addEventListener('keydown', onTrackKey)
-  ui.track.addEventListener('pointerenter', () => {
-    trackRect = ui.track.getBoundingClientRect()
+  ui.spineScroll.addEventListener('click', onSpineClick)
+  ui.spineScroll.addEventListener('keydown', onSpineKey)
+  ui.spineScroll.addEventListener('scroll', () => {
+    if (scrollRaf !== 0) return
+    scrollRaf = requestAnimationFrame(() => {
+      scrollRaf = 0
+      paintSpineCanvas()
+    })
   })
-  ui.track.addEventListener('pointermove', (event) => {
-    onHover(event)
-    onTrackPointerMove(event)
-  })
-  ui.track.addEventListener('pointerdown', onTrackPointerDown)
-  ui.track.addEventListener('pointerup', onTrackPointerUp)
-  ui.track.addEventListener('pointercancel', onTrackPointerUp)
-  ui.track.addEventListener('pointerleave', hideTip)
-  ui.track.addEventListener('wheel', onWheel, { passive: false })
   ui.listScroll.addEventListener('scroll', onListScroll)
+  ui.listScroll.addEventListener('keydown', onListKey)
   ui.settingsBtn.addEventListener('click', openPanel)
   ui.drawerScrim.addEventListener('click', closePanel)
   ui.panelClose.addEventListener('click', closePanel)
@@ -2873,10 +2596,11 @@ ui.search.value = ''
       return
     }
     if (event.key !== 'Escape') return
-    if (!ui.posterMenu.hidden) {
+    if (openMenuPanel !== null) {
       event.preventDefault()
-      closePosterMenu()
-      ui.exportPosterBtn.focus({ preventScroll: true })
+      const anchor = openMenuAnchor
+      closeMenus()
+      anchor?.focus({ preventScroll: true })
       return
     }
     if (state.calendarOpen) {
@@ -2894,39 +2618,8 @@ ui.search.value = ''
     if (projection.active) stopProjection()
     else startProjection()
   })
-  ui.zoomIn.addEventListener('click', () => zoomBy(1.6))
-  ui.zoomOut.addEventListener('click', () => zoomBy(1 / 1.6))
-  ui.zoomReset.addEventListener('click', () => applyView(fullDay(dayStart())))
-  ui.zoomFit.addEventListener('click', () =>
-    applyView(fitView(state.day.firstAt, state.day.lastAt, dayStart()))
-  )
-  ui.exportPosterBtn.addEventListener('click', togglePosterMenu)
-  ui.posterMenu.addEventListener('click', (event) => {
-    const target = event.target
-    if (!(target instanceof HTMLElement)) return
-    const item = target.closest<HTMLElement>('[data-theme]')
-    const theme = item?.dataset.theme
-    if (theme !== 'classic' && theme !== 'noir' && theme !== 'minimal') return
-    posterTheme = theme
-    closePosterMenu()
-    void exportPoster(posterTheme)
-  })
-  ui.posterMenu.addEventListener('keydown', onPosterMenuKey)
-  document.addEventListener('pointerdown', (event) => {
-    if (ui.posterMenu.hidden) return
-    const target = event.target
-    if (target instanceof Node && (ui.posterMenu.contains(target) || ui.exportPosterBtn.contains(target))) {
-      return
-    }
-    closePosterMenu()
-  })
-  ui.exportPdfBtn.addEventListener('click', () => {
-    void exportPdfNow()
-  })
-  ui.exportEdlBtn.addEventListener('click', () => {
-    void exportEdlNow()
-  })
   ui.compareOpenBtn.addEventListener('click', () => {
+    closeMenus()
     void openCompare()
   })
   ui.compareClose.addEventListener('click', closeCompare)
@@ -2949,6 +2642,7 @@ ui.search.value = ''
     void selectDay(date)
   })
   ui.calendarOpenBtn.addEventListener('click', () => {
+    closeMenus()
     void openCalendar()
   })
   ui.calendarClose.addEventListener('click', closeCalendar)
@@ -2973,13 +2667,6 @@ ui.search.value = ''
     const button = target.closest<HTMLElement>('[data-project]')
     const name = button?.dataset.project
     if (name) removeProject(name)
-  })
-  ui.week.addEventListener('click', (event) => {
-    const target = event.target
-    if (!(target instanceof HTMLElement)) return
-    const button = target.closest<HTMLElement>('[data-date]')
-    const date = button?.dataset.date
-    if (date && date !== state.date) void selectDay(date)
   })
   ui.modeDay.addEventListener('click', () => setMode('day'))
   ui.modeWeek.addEventListener('click', () => setMode('week'))
@@ -3031,7 +2718,7 @@ ui.search.value = ''
   })
   window.setInterval(() => {
     updateElapsed()
-    updateMarkers()
+    paintSpineCanvas()
   }, 1000)
 }
 
@@ -3040,13 +2727,12 @@ export async function boot(): Promise<void> {
   if (!root) return
   appRoot = root
   ui = collect(root)
-  renderRuler()
 
   const source = createSource()
   const dates = await source.listDays()
   const today = isoDate(Date.now())
-  // 当天即使还没有日文件也默认今天并走空状态，不能退回昨
-const date = today
+  // 当天即使还没有日文件也默认今天并走空状态，不能退回上一
+  const date = today
   const [day, live] = await Promise.all([source.getDay(date), source.live()])
 
   state = {
@@ -3066,9 +2752,6 @@ const date = today
     panelOpen: false,
     browsingHistory: false,
     datesRefreshedFor: null,
-    view: fullDay(startOfDay(date)),
-    weekDates: [],
-    weekDays: [],
     note: '',
     noteSaved: '',
     mode: 'day',
@@ -3087,32 +2770,33 @@ const date = today
   }
   state.playhead = initialPlayhead()
 
+  ui.spineSpacer.style.height = `${spineHeight()}px`
   renderDates()
   renderSettingsStatic()
   renderSettings()
   renderLive()
-  buildPosterMenu()
   setSpeed(state.speed)
+  setPlayButton(false)
   measure()
   renderDay()
-  renderRuler()
-  updateZoomLevel()
+  revealSpine(state.playhead)
+  paintSpineCanvas()
   bindEvents()
 
-  // 字体就绪前画的是无字版，就绪后重画一次（胶片与缩略图
-onStillFontsReady(() => {
-    reelKey = ''
+  // 字体就绪后再画一次剧照（有文字版本）
+  onStillFontsReady(() => {
+    frameKey = ''
     listSignature = ''
     windowSignature = ''
     renderDay()
+    paintSpineCanvas()
   })
 
-  void loadStripWeek()
   void loadNote(date)
   void loadSettings()
 
   const observer = new ResizeObserver(measure)
-  observer.observe(ui.track)
+  observer.observe(ui.spineScroll)
   observer.observe(ui.listScroll)
   source.onTick(handleTick)
 }

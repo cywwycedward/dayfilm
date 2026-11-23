@@ -132,3 +132,57 @@ out/preload/index.js      2.34 kB  ✓ built in 14ms
 - **真机导出按钮没点**：本轮用的是同一个 `writePdf` 的探针（完全一样的代码路径），没走 UI 的"导出 PDF"按钮与保存对话框；建议主 Agent 用构建产物点一次确认对话框与最终文件。
 - **旧文件的白页没复现**（见上），如果用户再遇到，先让他用 Edge 重新加载一次并回报；若仍复现，需要拿到那份具体文件（路径 + 字节数）再比对内容流。
 - 顺带跟着主 Agent 的契约更新：`preload` 里的 `ProjectionBridge` 改为从 `src/shared/ipc.ts` 导入（那份类型已进契约），不再本地声明一份。
+
+---
+
+## 追加：HUD 多显示器位置（R40.6）
+
+### 行为变化
+
+| 场景 | 之前 | 现在 |
+| --- | --- | --- |
+| 没拖过 | 主屏右上角 | **光标所在显示器**的工作区右上角（拿不到光标回主屏） |
+| 保存的位置在屏外 | 丢回默认位置 | **夹进最近的显示器工作区**（不丢位置） |
+| 显示器增删/分辨率变化 | 不处理 | 监听到 `display-added/removed/metrics-changed` 后重夹一次（只在 HUD 可见时） |
+
+### 实现
+
+- `src/main/hud/position.ts`（纯几何，无 Electron）：
+  - `isInsideWorkArea(position, size, area)`：完整包含才算在内（副屏负坐标自然成立）。
+  - `nearestWorkArea(position, size, workAreas)`：先找能完整容纳的；否则取重叠面积最大的；完全不重叠时取间隙距离最近的。并列时保留列表第一个，结果稳定。
+  - `clampToWorkAreas(position, size, workAreas)`：在某个工作区内就原样返回，否则把 x/y 夹进最近工作区；工作区比窗口还小时贴左上角（用 `Math.max(area.x, area.x+width-size.width)` 防反转）。
+  - `resolveHudPosition(saved, size, workAreas, fallbackWorkArea, margin)`：没拖过 → `defaultHudPosition(fallbackWorkArea)`；拖过 → `clampToWorkAreas`。
+  - 删掉了旧的 `isHudPositionVisible`（“40px 可见就算在屏上”的阈值口径已被夹紧语义取代）。
+- `src/main/hud/index.ts`：`place()` 的 fallback 改成 `screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea`，`try/catch` 包一层（远程会话拿不到光标时回主屏）；新增 `reclamp()`，在 `display-added` / `display-removed` / `display-metrics-changed` 时触发，内部先看窗口是否可见；`destroy()` 里 `removeListener` 三个事件。
+
+### 取舍
+
+- 夹紧会把“只露出一条边”的窗口也拉回屏内（旧版允许 40px 露边）。好处是“重启后一定在屏内”，代价是拖到边缘一半的窗口在下次启动时会被纠回。
+- 夹紧后的位置会经 `moved` 防抖写回设置（`setPosition` 会触发 `moved`），即“新位置就是以后的位置”，不会每次启动都重算。
+- 显示器变化时重夹也走同一条写回路径；如果窗口原本就在屏内，`setPosition` 写的是同一个坐标，设置不会变。
+
+### 单测（`tests/main/hud.test.ts`，20 例）
+
+新增/改写覆盖：光标在副屏时的默认位置、`isInsideWorkArea` 边界与负坐标、`nearestWorkArea` 的包含/重叠/间隙三级优先、`clampToWorkAreas` 的单屏越界（右、左上）、**超出底边只夹纵向**、**右屏负坐标**（屏内保留 / 拖出左缘夹回）、**跨屏**（1800..2160 → 夹进右屏；1700..2060 → 夹进主屏；1500..1860 完全在主屏内不动）、工作区比窗口小的退化情形、无显示器信息、`resolveHudPosition` 的 null 坐标与“屏外夹紧而不是丢回默认”。
+
+写测试时自己错了一次：把 `x=1500` 的窗口当成“跨屏”，其实 `1500+360=1860 < 1920` 完全在主屏内，断言失败后改成“1500 不动、1700 夹主屏、1800 夹右屏”三个点，把边界两侧都钉住。
+
+### 本轮验证
+
+```text
+=== npx tsc --noEmit -p tsconfig.node.json ===
+（无输出，exit=0）
+
+=== npx vitest run tests/main ===
+ Test Files  22 passed (22)
+      Tests  235 passed (235)
+
+=== npm run build ===
+out/main/index.js        76.59 kB  ✓ built in 220ms
+out/preload/index.js      2.34 kB  ✓ built in 14ms
+```
+
+### 没验证的部分
+
+- **真机多显示器**：本机是单屏，仅靠单测与几何推导；如果主 Agent 有双屏环境，值得拖着 HUD 跨屏、拔插一次副屏看一眼。
+- 光标显示器的选择发生在 `place()` 里（Electron 侧），没有单测；纯函数部分（默认位置、夹紧）已全覆盖。

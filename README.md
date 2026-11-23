@@ -58,7 +58,7 @@ npm run dev
 
 - 产品目标：[产品说明](docs/product/dayfilm.md)
 - 预期行为：[v1 功能规格](docs/specs/dayfilm-v1.md) · [可交付版本要求](docs/specs/dayfilm-delivery.md) · [v1.1 导演版](docs/specs/dayfilm-v1.1.md) · [v1.2 一周电影](docs/specs/dayfilm-v1.2.md) · [v1.4 导演工具箱](docs/specs/dayfilm-v1.4.md)
-- 视觉：[视觉语言](docs/product/visual-language.md)
+- 视觉：[设计系统](DESIGN.md) · [视觉语言](docs/product/visual-language.md) · [界面概念图](docs/product/ui-concept-v2.png)
 - 结构：[架构](docs/architecture/dayfilm.md) · [IPC 契约](docs/api/ipc-contract.md) · [数据格式](docs/data/store-format.md)
 - 使用与验收：[运行与使用](docs/operations/run.md) · [MVP 验证](docs/operations/mvp-verification.md) · [交付验证](docs/operations/delivery-verification.md) · [性能实测](docs/operations/perf-report.md)
 
