@@ -3,12 +3,15 @@ import type { ProjectRule } from '../../src/shared/settings'
 import type { DayRollup, Scene, TopApp } from '../../src/shared/types'
 import {
   POSTER_HEIGHT,
+  POSTER_MARGIN,
   POSTER_WIDTH,
   computePoster,
+  posterPalette,
   truncateText,
-  wrapText
+  wrapText,
+  type PosterLayout
 } from '../../src/renderer/src/lib/poster'
-import { fmtClock, startOfDay } from '../../src/renderer/src/lib/time'
+import { fmtClock, fmtDuration, startOfDay } from '../../src/renderer/src/lib/time'
 
 const DAY = '2025-01-15'
 const HOUR = 3_600_000
@@ -64,6 +67,36 @@ const scenes = [
   shot('e', 14.2, 35, 'Code', 'dayfilm - 海报')
 ]
 
+/** 与 poster.ts 的估算同一口径（CJK 1em、ASCII 0.6em），只用来断言列不重叠。 */
+function monoWidth(text: string, size: number): number {
+  let width = 0
+  for (const char of text) width += (char.charCodeAt(0) > 0x2e80 ? 1 : 0.6) * size
+  return width
+}
+
+/** 三项数字按标签/数值成对排在 y=400 与 y=456。 */
+function metricTexts(layout: PosterLayout): string[] {
+  return layout.texts.filter((item) => item.y === 400 || item.y === 456).map((item) => item.text)
+}
+
+/** #rrggbb → WCAG 相对亮度 */
+function luminance(hex: string): number {
+  const channel = (value: number): number => {
+    const ratio = value / 255
+    return ratio <= 0.03928 ? ratio / 12.92 : ((ratio + 0.055) / 1.055) ** 2.4
+  }
+  return (
+    0.2126 * channel(Number.parseInt(hex.slice(1, 3), 16)) +
+    0.7152 * channel(Number.parseInt(hex.slice(3, 5), 16)) +
+    0.0722 * channel(Number.parseInt(hex.slice(5, 7), 16))
+  )
+}
+
+function contrast(a: string, b: string): number {
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (light + 0.05) / (dark + 0.05)
+}
+
 describe('wrapText / truncateText', () => {
   test('空文本没有行', () => {
     expect(wrapText('   ', 400, 20)).toEqual([])
@@ -118,10 +151,17 @@ describe('computePoster 版式', () => {
     expect(wordmark).toMatchObject({ family: 'display', size: 18, tone: 'accent' })
   })
 
-  test('三项数字横向排开在 600 宽内', () => {
+  test('三项数字按内容宽度排开，不重叠且在 600 宽内', () => {
     const numbers = layout.texts.filter((item) => item.size === 56)
-    expect(numbers.map((item) => item.x)).toEqual([96, 296, 496])
     expect(numbers.map((item) => item.text)).toEqual(['3 小时 40 分', '5', '4'])
+    expect(numbers[0].x).toBe(96)
+    for (let index = 1; index < numbers.length; index += 1) {
+      const previous = numbers[index - 1]
+      // 上一列的估算宽度不跨到下一列，且至少留 40px 间隔
+      expect(previous.x + monoWidth(previous.text, 56)).toBeLessThanOrEqual(numbers[index].x)
+      expect(numbers[index].x - previous.x).toBeGreaterThanOrEqual(40)
+    }
+    expect(numbers[2].x + monoWidth('4', 56)).toBeLessThanOrEqual(96 + 600)
   })
 
   test('胶片带按 firstAt..lastAt 铺满右栏，不是 00:00–24:00', () => {
@@ -144,7 +184,9 @@ describe('computePoster 版式', () => {
     expect(layout.ruler.ticks[0]).toEqual({ x: 744, label: fmtClock(scenes[0].start) })
     expect(layout.ruler.ticks[11].x).toBe(1504)
     expect(layout.ruler.ticks[11].label).toBe(fmtClock(scenes[scenes.length - 1].end))
-    expect(layout.ruler.y).toBeGreaterThan(layout.film.y + layout.film.h)
+    const film = layout.film
+    if (film === null) throw new Error('经典主题应有胶片带')
+    expect(layout.ruler.y).toBeGreaterThan(film.y + film.h)
   })
 
   test('四张接触印相 340×191，两列两行等宽，图注对齐卡片左缘', () => {
@@ -186,10 +228,12 @@ describe('computePoster 版式', () => {
   })
 
   test('背景题材水印：Bebas 280、4%、右对齐且只裁在右栏', () => {
-    expect(layout.backdrop).toMatchObject({ text: '标准剪辑', size: 280, x: 1504, y: 760 })
-    expect(layout.backdrop.opacity).toBeCloseTo(0.04, 6)
-    expect(layout.backdrop.clip).toEqual({ x: 744, y: 0, w: 760, h: POSTER_HEIGHT })
-    expect(layout.backdrop.fade).toBeGreaterThan(0)
+    const backdrop = layout.backdrop
+    if (backdrop === null) throw new Error('经典主题应有题材水印')
+    expect(backdrop).toMatchObject({ text: '标准剪辑', size: 280, x: 1504, y: 760 })
+    expect(backdrop.opacity).toBeCloseTo(0.04, 6)
+    expect(backdrop.clip).toEqual({ x: 744, y: 0, w: 760, h: POSTER_HEIGHT })
+    expect(backdrop.fade).toBeGreaterThan(0)
   })
 
   test('页脚：底部发丝线 + DATE · 由 Dayfilm 生成', () => {
@@ -237,7 +281,9 @@ describe('computePoster 版式', () => {
   })
 
   test('所有矩形都在画布内', () => {
-    const rects = [layout.film, ...layout.blocks, ...layout.prints]
+    const film = layout.film
+    if (film === null) throw new Error('经典主题应有胶片带')
+    const rects = [film, ...layout.blocks, ...layout.prints]
     for (const rect of rects) {
       expect(rect.x).toBeGreaterThanOrEqual(0)
       expect(rect.y).toBeGreaterThanOrEqual(0)
@@ -277,5 +323,132 @@ describe('computePoster 分支', () => {
     expect(layout.extremes).toBeNull()
     expect(layout.texts.map((item) => item.text)).toContain('未开镜')
     expect(layout.ruler.ticks).toEqual([])
+  })
+})
+
+describe('海报主题（R50）', () => {
+  const note = '今天把胶片缩放做完了，明天补海报。'
+  const themes = ['classic', 'noir', 'minimal'] as const
+  const layoutFor = (theme: (typeof themes)[number]) =>
+    computePoster({ day: day(scenes), projects, note, theme })
+
+  test('三种主题画布同尺寸，必含元素都在版心内', () => {
+    for (const theme of themes) {
+      const layout = layoutFor(theme)
+      expect(layout.width).toBe(POSTER_WIDTH)
+      expect(layout.height).toBe(POSTER_HEIGHT)
+      expect(layout.theme).toBe(theme)
+      expect(layout.palette).toEqual(posterPalette(theme))
+      const texts = layout.texts.map((item) => item.text)
+      expect(texts).toContain('2025 年 1 月 15 日 · 周三')
+      expect(texts).toContain('标准剪辑')
+      for (const label of ['活跃时长', '镜头', '剪辑']) expect(texts).toContain(label)
+      expect(texts).toContain('3 小时 40 分')
+      for (const text of layout.texts) {
+        expect(text.x).toBeGreaterThanOrEqual(POSTER_MARGIN)
+        expect(text.x).toBeLessThanOrEqual(POSTER_WIDTH - POSTER_MARGIN)
+        expect(text.y).toBeGreaterThan(POSTER_MARGIN)
+        expect(text.y).toBeLessThan(POSTER_HEIGHT - POSTER_MARGIN)
+      }
+      for (const rect of layout.prints) {
+        expect(rect.x).toBeGreaterThanOrEqual(POSTER_MARGIN)
+        expect(rect.x + rect.w).toBeLessThanOrEqual(POSTER_WIDTH - POSTER_MARGIN)
+      }
+    }
+  })
+
+  test('不传主题就是经典：胶片带与四张印相都在', () => {
+    const layout = computePoster({ day: day(scenes), projects, note })
+    expect(layout.theme).toBe('classic')
+    expect(layout.film).not.toBeNull()
+    expect(layout.prints).toHaveLength(4)
+  })
+
+  test('黑色电影：胶片带收成细缝，只留一张最大图，标题字距更紧', () => {
+    const layout = layoutFor('noir')
+    const classic = layoutFor('classic')
+    if (layout.film === null || classic.film === null) throw new Error('缺少胶片带')
+    expect(layout.film.h).toBeLessThan(classic.film.h)
+    expect(layout.film.w).toBe(classic.film.w)
+    expect(layout.blocks.length).toBeGreaterThan(0)
+    expect(layout.prints).toHaveLength(1)
+    // 留下的就是最长镜头那张
+    expect(layout.prints[0].caption).toBe(classic.prints[0].caption)
+    expect(layout.prints[0].x).toBeGreaterThan(classic.prints[0].x)
+    expect(layout.prints[0].w).toBeGreaterThan(classic.prints[0].w)
+    // 图注紧贴在放大后的卡片下方，不被卡片遮住
+    expect(layout.prints[0].captionY).toBe(layout.prints[0].y + layout.prints[0].h + 20)
+    const genre = layout.texts.find((item) => item.text === '标准剪辑')
+    expect(genre?.letterSpacing).toBeLessThan(0)
+    expect(layout.palette.accent).not.toBe(classic.palette.accent)
+  })
+
+  test('极简：没有胶片带、没有接触印相、没有水印，只留一句手记', () => {
+    const layout = layoutFor('minimal')
+    expect(layout.film).toBeNull()
+    expect(layout.holes).toBeNull()
+    expect(layout.ruler.ticks).toEqual([])
+    expect(layout.blocks).toEqual([])
+    expect(layout.prints).toEqual([])
+    expect(layout.backdrop).toBeNull()
+    expect(layout.note).not.toBeNull()
+    expect(layout.note?.lines.length).toBe(1)
+    expect(layout.texts.map((item) => item.text)).not.toContain('平均每小时 3.6 次切换。')
+    // 纸白底、墨黑字：背景与正文是两个极端
+    expect(layout.palette.background).toBe('#efece4')
+    expect(layout.palette.paper).toBe('#14161a')
+  })
+
+  test('三套主题的数字文本与格式化完全一致', () => {
+    const classic = layoutFor('classic')
+    const noir = layoutFor('noir')
+    const minimal = layoutFor('minimal')
+    // 标签 + 数值成对出现在 y=400/456
+    expect(metricTexts(classic)).toEqual(['活跃时长', '3 小时 40 分', '镜头', '5', '剪辑', '4'])
+    expect(metricTexts(noir)).toEqual(metricTexts(classic))
+    expect(metricTexts(minimal)).toEqual(metricTexts(classic))
+    // 同一个排版：三套主题的列位置也一致
+    const xOf = (layout: typeof classic): number[] =>
+      layout.texts.filter((item) => item.y === 456).map((item) => item.x)
+    expect(xOf(noir)).toEqual(xOf(classic))
+    expect(xOf(minimal)).toEqual(xOf(classic))
+    // 活跃时长写「N 分 / N 小时 M 分」，镜头与剪辑是纯数字
+    const values = metricTexts(minimal).filter((_, index) => index % 2 === 1)
+    expect(values[0]).toMatch(/^\d+ 小时( \d\d 分)?$|^\d+ 分$/)
+    expect(values[1]).toMatch(/^\d+$/)
+    expect(values[2]).toMatch(/^\d+$/)
+  })
+
+  test('印相下的镜头时长用「N 分 M 秒」口径', () => {
+    for (const theme of ['classic', 'noir'] as const) {
+      const layout = layoutFor(theme)
+      expect(layout.prints.length).toBeGreaterThan(0)
+      for (const print of layout.prints) {
+        expect(print.caption.endsWith(` · ${fmtDuration(print.seconds)}`)).toBe(true)
+      }
+      expect(layout.prints[0].caption).toMatch(/ · (\d+ 小时( \d\d 分)?|\d+ 分( \d\d 秒)?|\d+ 秒)$/)
+    }
+  })
+
+  test('极简的纸白底上数字与正文都够对比', () => {
+    for (const theme of themes) {
+      const layout = layoutFor(theme)
+      expect(contrast(layout.palette.background, layout.palette.paper)).toBeGreaterThan(7)
+      // 数字用的 tone 是 title → palette.paper，与底色对比足够
+      for (const value of layout.texts.filter((item) => item.size === 56)) {
+        expect(value.tone).toBe('title')
+      }
+    }
+    expect(layoutFor('minimal').palette.background).toBe('#efece4')
+  })
+
+  test('空的一天三种主题都给出有限坐标', () => {
+    for (const theme of themes) {
+      const layout = computePoster({ day: day([]), projects, note: '', theme })
+      expect(layout.prints).toEqual([])
+      expect(layout.note).toBeNull()
+      expect(Number.isFinite(layout.ruler.y)).toBe(true)
+      expect(layout.footer.text).toBe(`DAYFILM · ${DAY} · 由 Dayfilm 生成`)
+    }
   })
 })

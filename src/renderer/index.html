@@ -33,8 +33,9 @@
           </label>
         </div>
         <div class="topbar__end">
-          <button class="btn" id="exportPoster" type="button">导出海报</button>
+          <button class="btn" id="exportPoster" type="button" aria-haspopup="menu" aria-expanded="false">导出海报</button>
           <button class="btn" id="export" type="button">导出剧本</button>
+          <button class="btn btn--quiet" id="exportPdf" type="button">导出 PDF</button>
           <button class="btn btn--quiet" id="exportEdl" type="button">导出 EDL</button>
           <button class="btn" id="settings" type="button" aria-haspopup="dialog" aria-expanded="false">
             设置
@@ -65,6 +66,10 @@
         <div class="reel__head">
           <h2 class="reel__title" id="reelTitle">今日胶片</h2>
           <span class="reel__hint">← → 选镜头 · 滚轮缩放 · 拖动平移 · 点周格切日</span>
+          <div class="reel__modes" role="group" aria-label="片场视图">
+            <button class="btn btn--quiet" id="compareOpen" type="button" aria-haspopup="dialog">对比</button>
+            <button class="btn btn--quiet" id="calendarOpen" type="button" aria-haspopup="dialog">日历</button>
+          </div>
           <div class="mode" role="group" aria-label="视图模式">
             <button class="mode__btn is-active" id="modeDay" type="button" aria-pressed="true">日</button>
             <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
@@ -277,6 +282,45 @@
       </div>
 
       <p class="sr-only" id="announce" role="status" aria-live="polite"></p>
+
+      <div class="menu" id="posterMenu" role="menu" aria-label="海报主题" hidden></div>
+
+      <div class="overlay" id="compare" hidden>
+        <div class="overlay__scrim" id="compareScrim"></div>
+        <section
+          class="overlay__panel overlay__panel--compare"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="compareTitle"
+        >
+          <header class="overlay__head">
+            <h2 id="compareTitle">对比两天</h2>
+            <button class="btn btn--quiet" id="compareClose" type="button">关闭</button>
+          </header>
+          <div class="compare">
+            <div class="compare__side" id="compareLeft"></div>
+            <div class="compare__diff" id="compareDiff"></div>
+            <div class="compare__side" id="compareRight"></div>
+          </div>
+        </section>
+      </div>
+
+      <div class="overlay" id="calendar" hidden>
+        <div class="overlay__scrim" id="calendarScrim"></div>
+        <section
+          class="overlay__panel overlay__panel--calendar"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="calendarTitle"
+        >
+          <header class="overlay__head">
+            <h2 id="calendarTitle">片场日历</h2>
+            <span class="calendar__progress" id="calendarProgress" role="status"></span>
+            <button class="btn btn--quiet" id="calendarClose" type="button">关闭</button>
+          </header>
+          <div class="calendar" id="calendarGrid" role="grid" aria-label="近 12 周的活动"></div>
+        </section>
+      </div>
     </div>
     <script type="module" src="./src/main.ts"></script>
   </body>

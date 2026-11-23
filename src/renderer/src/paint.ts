@@ -1,5 +1,5 @@
 /** 胶片、周视图迷你条、海报的绘制。剧照本体在 paint-still.ts，这里只摆位置。 */
-import type { PosterLayout } from './lib/poster'
+import type { PosterLayout, PosterPalette } from './lib/poster'
 import type { ReelRect } from './lib/zoom'
 import { drawStill, paintProjectionBoard } from './paint-still'
 import { familyColor } from './lib/still-frame'
@@ -159,13 +159,47 @@ export function paintWeekBars(
   })
 }
 
-const POSTER_TONES: Record<string, string> = {
-  display: '#ece7dc',
-  title: '#ece7dc',
-  label: 'rgba(236,231,220,.45)',
-  body: 'rgba(236,231,220,.7)',
-  muted: 'rgba(236,231,220,.4)',
-  accent: '#e8b45a'
+/** 对比视图的素材区间带：按各自首尾铺满半宽，没有镜头时画点阵。 */
+export function paintCompareStrip(
+  ctx: CanvasRenderingContext2D,
+  blocks: readonly { from: number; to: number; hue: number }[],
+  width: number,
+  height: number
+): void {
+  ctx.clearRect(0, 0, width, height)
+  ctx.fillStyle = '#0a0b0d'
+  ctx.fillRect(0, 0, width, height)
+  if (blocks.length === 0) {
+    ctx.fillStyle = 'rgba(236, 231, 220, 0.07)'
+    for (let x = 6; x < width - 4; x += 12) {
+      for (let y = 6; y < height - 5; y += 9) ctx.fillRect(x, y, 1, 1)
+    }
+    return
+  }
+  for (const block of blocks) {
+    const x = block.from * width
+    const w = Math.max(1.5, (block.to - block.from) * width)
+    ctx.fillStyle = familyColor(block.hue, 0.85)
+    ctx.fillRect(x, 0, w, height)
+  }
+}
+
+const POSTER_TONES: Record<string, keyof PosterPalette> = {
+  display: 'paper',
+  title: 'paper',
+  label: 'muted',
+  body: 'body',
+  muted: 'muted',
+  accent: 'accent'
+}
+
+/** #rrggbb → rgba()；已经是不透明 rgb/rgba 时原样返回。 */
+function withAlpha(color: string, alpha: number): string {
+  if (!color.startsWith('#') || color.length !== 7) return color
+  const r = Number.parseInt(color.slice(1, 3), 16)
+  const g = Number.parseInt(color.slice(3, 5), 16)
+  const b = Number.parseInt(color.slice(5, 7), 16)
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
 function posterFont(family: 'display' | 'ui' | 'mono', size: number, weight: number): string {
@@ -174,67 +208,73 @@ function posterFont(family: 'display' | 'ui' | 'mono', size: number, weight: num
   return `${weight} ${size}px 'Inter', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif`
 }
 
-/** 1600×1000 的一日电影海报：题材水印、素材区间胶片带、三张接触印相。 */
+/** 1600×1000 的一日电影海报：配色、胶片带、接触印相都由主题决定（R50）。 */
 export function paintPoster(ctx: CanvasRenderingContext2D, layout: PosterLayout): void {
-  const { width, height } = layout
+  const { width, height, palette } = layout
   ctx.clearRect(0, 0, width, height)
-  ctx.fillStyle = '#0a0b0d'
+  ctx.fillStyle = palette.background
   ctx.fillRect(0, 0, width, height)
   ctx.textBaseline = 'alphabetic'
 
   // 背景题材水印：右对齐、裁在右栏，左缘渐显，不压左栏文字
   const backdrop = layout.backdrop
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(backdrop.clip.x, backdrop.clip.y, backdrop.clip.w, backdrop.clip.h)
-  ctx.clip()
-  const fade = ctx.createLinearGradient(backdrop.clip.x, 0, backdrop.clip.x + backdrop.fade, 0)
-  fade.addColorStop(0, 'rgba(236, 231, 220, 0)')
-  fade.addColorStop(1, `rgba(236, 231, 220, ${backdrop.opacity})`)
-  ctx.fillStyle = fade
-  ctx.font = posterFont('display', backdrop.size, 400)
-  ctx.textAlign = 'right'
-  ctx.fillText(backdrop.text, backdrop.x, backdrop.y)
-  ctx.restore()
-
-  // 胶片带：族色块 + 上下齿孔
-  const film = layout.film
-  ctx.fillStyle = '#101216'
-  ctx.fillRect(film.x, film.y, film.w, film.h)
-  ctx.save()
-  ctx.beginPath()
-  ctx.rect(film.x, film.y, film.w, film.h)
-  ctx.clip()
-  for (const block of layout.blocks) {
-    ctx.fillStyle = familyColor(block.hue, 0.85)
-    ctx.fillRect(block.x, block.y, block.w, block.h)
-  }
-  const holes = layout.holes
-  ctx.fillStyle = '#0a0b0d'
-  for (let x = film.x + 10; x <= film.x + film.w - holes.w; x += holes.gap) {
-    ctx.fillRect(x, holes.top, holes.w, holes.h)
-    ctx.fillRect(x, holes.bottom, holes.w, holes.h)
-  }
-  ctx.restore()
-  ctx.strokeStyle = 'rgba(236, 231, 220, 0.12)'
-  ctx.lineWidth = 1
-  ctx.strokeRect(film.x + 0.5, film.y + 0.5, film.w - 1, film.h - 1)
-
-  // 刻度尺：首尾对齐不出栏，中间居中
-  ctx.strokeStyle = 'rgba(236, 231, 220, 0.16)'
-  for (const tick of layout.ruler.ticks) {
+  if (backdrop !== null) {
+    ctx.save()
     ctx.beginPath()
-    ctx.moveTo(Math.round(tick.x) + 0.5, layout.ruler.y)
-    ctx.lineTo(Math.round(tick.x) + 0.5, layout.ruler.y + 4)
-    ctx.stroke()
+    ctx.rect(backdrop.clip.x, backdrop.clip.y, backdrop.clip.w, backdrop.clip.h)
+    ctx.clip()
+    const fade = ctx.createLinearGradient(backdrop.clip.x, 0, backdrop.clip.x + backdrop.fade, 0)
+    fade.addColorStop(0, withAlpha(palette.paper, 0))
+    fade.addColorStop(1, withAlpha(palette.paper, backdrop.opacity))
+    ctx.fillStyle = fade
+    ctx.font = posterFont('display', backdrop.size, 400)
+    ctx.textAlign = 'right'
+    ctx.fillText(backdrop.text, backdrop.x, backdrop.y)
+    ctx.restore()
   }
-  ctx.font = posterFont('mono', 10, 400)
-  ctx.fillStyle = 'rgba(236, 231, 220, 0.4)'
-  layout.ruler.ticks.forEach((tick, index, all) => {
-    ctx.textAlign = index === 0 ? 'left' : index === all.length - 1 ? 'right' : 'center'
-    ctx.fillText(tick.label, tick.x, layout.ruler.y + 20)
-  })
-  ctx.textAlign = 'left'
+
+  // 胶片带：族色块 + 上下齿孔；极简主题没有
+  const film = layout.film
+  if (film !== null) {
+    ctx.fillStyle = palette.panel
+    ctx.fillRect(film.x, film.y, film.w, film.h)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(film.x, film.y, film.w, film.h)
+    ctx.clip()
+    for (const block of layout.blocks) {
+      ctx.fillStyle = familyColor(block.hue, 0.85)
+      ctx.fillRect(block.x, block.y, block.w, block.h)
+    }
+    const holes = layout.holes
+    if (holes !== null) {
+      ctx.fillStyle = palette.background
+      for (let x = film.x + 10; x <= film.x + film.w - holes.w; x += holes.gap) {
+        ctx.fillRect(x, holes.top, holes.w, holes.h)
+        ctx.fillRect(x, holes.bottom, holes.w, holes.h)
+      }
+    }
+    ctx.restore()
+    ctx.strokeStyle = palette.hairline
+    ctx.lineWidth = 1
+    ctx.strokeRect(film.x + 0.5, film.y + 0.5, film.w - 1, film.h - 1)
+
+    // 刻度尺：首尾对齐不出栏，中间居中
+    ctx.strokeStyle = palette.hairline
+    for (const tick of layout.ruler.ticks) {
+      ctx.beginPath()
+      ctx.moveTo(Math.round(tick.x) + 0.5, layout.ruler.y)
+      ctx.lineTo(Math.round(tick.x) + 0.5, layout.ruler.y + 4)
+      ctx.stroke()
+    }
+    ctx.font = posterFont('mono', 10, 400)
+    ctx.fillStyle = palette.muted
+    layout.ruler.ticks.forEach((tick, index, all) => {
+      ctx.textAlign = index === 0 ? 'left' : index === all.length - 1 ? 'right' : 'center'
+      ctx.fillText(tick.label, tick.x, layout.ruler.y + 20)
+    })
+    ctx.textAlign = 'left'
+  }
 
   // 接触印相：与放映画面同一套版式（大镜次 + 应用名 + 时长尺）
   for (const print of layout.prints) {
@@ -263,29 +303,31 @@ export function paintPoster(ctx: CanvasRenderingContext2D, layout: PosterLayout)
       })
     )
     ctx.restore()
-    ctx.strokeStyle = 'rgba(236, 231, 220, 0.12)'
+    ctx.strokeStyle = palette.hairline
     ctx.strokeRect(print.x + 0.5, print.y + 0.5, print.w - 1, print.h - 1)
     ctx.font = posterFont('mono', 11, 400)
-    ctx.fillStyle = 'rgba(236, 231, 220, 0.5)'
+    ctx.fillStyle = palette.dim
     ctx.fillText(print.caption, print.x, print.captionY)
   }
 
   // 左栏文字
   for (const text of layout.texts) {
-    ctx.fillStyle = POSTER_TONES[text.tone] ?? POSTER_TONES.body
+    ctx.fillStyle = palette[POSTER_TONES[text.tone] ?? 'body']
+    if (text.letterSpacing !== undefined) ctx.letterSpacing = `${text.letterSpacing}px`
     ctx.font = posterFont(text.family, text.size, text.weight)
     ctx.textAlign = text.align ?? 'left'
     ctx.fillText(text.text, text.x, text.y, text.maxWidth)
+    if (text.letterSpacing !== undefined) ctx.letterSpacing = '0px'
   }
   ctx.textAlign = 'left'
 
   // 手记：2px 暖色竖线 + 最多三行
   const note = layout.note
   if (note) {
-    ctx.fillStyle = POSTER_TONES.accent
+    ctx.fillStyle = palette.accent
     ctx.fillRect(note.rule.x, note.rule.y0, note.rule.w, note.rule.y1 - note.rule.y0)
     ctx.font = posterFont('ui', note.size, 400)
-    ctx.fillStyle = POSTER_TONES.body
+    ctx.fillStyle = palette.body
     note.lines.forEach((line, index) => {
       ctx.fillText(line, note.x, note.y + index * note.lineHeight)
     })
@@ -295,19 +337,19 @@ export function paintPoster(ctx: CanvasRenderingContext2D, layout: PosterLayout)
   const extremes = layout.extremes
   if (extremes) {
     ctx.font = posterFont('mono', extremes.size, 400)
-    ctx.fillStyle = POSTER_TONES.muted
+    ctx.fillStyle = palette.muted
     extremes.lines.forEach((line, index) => {
       ctx.fillText(line, extremes.x, extremes.y + index * extremes.lineHeight)
     })
   }
 
   // 页脚发丝线 + 一行说明
-  ctx.strokeStyle = 'rgba(236, 231, 220, 0.12)'
+  ctx.strokeStyle = palette.hairline
   ctx.beginPath()
   ctx.moveTo(layout.footer.line.x0, layout.footer.line.y + 0.5)
   ctx.lineTo(layout.footer.line.x1, layout.footer.line.y + 0.5)
   ctx.stroke()
   ctx.font = posterFont('mono', 10, 400)
-  ctx.fillStyle = 'rgba(236, 231, 220, 0.4)'
+  ctx.fillStyle = palette.muted
   ctx.fillText(layout.footer.text, layout.footer.line.x0, layout.footer.line.y + 28)
 }

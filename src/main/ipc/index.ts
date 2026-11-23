@@ -18,6 +18,7 @@ export const GUARDED_CHANNELS = {
   setNote: IPC.setNote,
   saveImage: IPC.saveImage,
   exportEdl: IPC.exportEdl,
+  exportPdf: IPC.exportPdf,
   setHud: IPC.setHud,
   quit: IPC.quit
 } as const
@@ -37,6 +38,18 @@ export const SEND_CHANNELS = {
 } as const
 
 export type SendChannel = (typeof SEND_CHANNELS)[keyof typeof SEND_CHANNELS]
+
+/**
+ * 主进程单向通知渲染进程的通道（`webContents.send`，没有入参也不需要守卫）。
+ * 同样登记在案，避免界面与主进程各写一个字符串。
+ */
+export const PROJECTION_TOGGLE_CHANNEL = 'dayfilm:projection-toggle'
+
+export const OUTBOUND_CHANNELS = {
+  projectionToggle: PROJECTION_TOGGLE_CHANNEL
+} as const
+
+export type OutboundChannel = (typeof OUTBOUND_CHANNELS)[keyof typeof OUTBOUND_CHANNELS]
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
@@ -60,6 +73,7 @@ export interface IpcDeps {
   setNote(date: unknown, text: unknown): string
   saveImage(defaultName: unknown, pngBase64: unknown): Promise<{ path: string }> | { path: string }
   exportEdl(date: unknown): Promise<{ path: string }> | { path: string }
+  exportPdf(date: unknown): Promise<{ path: string }> | { path: string }
   setHud(visible: unknown): { visible: boolean }
   quit(): void
 }
@@ -78,6 +92,7 @@ export function createHandlers(deps: IpcDeps): Record<GuardedChannel, GuardedHan
     [IPC.setNote]: (date, text) => deps.setNote(date, text),
     [IPC.saveImage]: (defaultName, pngBase64) => deps.saveImage(defaultName, pngBase64),
     [IPC.exportEdl]: (date) => deps.exportEdl(date),
+    [IPC.exportPdf]: (date) => deps.exportPdf(date),
     [IPC.setHud]: (visible) => deps.setHud(visible),
     [IPC.quit]: () => deps.quit()
   }

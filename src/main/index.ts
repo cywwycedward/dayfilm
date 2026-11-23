@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, powerMonitor, session } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, powerMonitor, session } from 'electron'
 import { writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -14,6 +14,7 @@ import { createHud, hudPagePath, type HudHandle } from './hud'
 import { createIngest, type IngestResult } from './ingest'
 import {
   GUARDED_CHANNELS,
+  PROJECTION_TOGGLE_CHANNEL,
   SEND_CHANNELS,
   createHandlers,
   createSendHandlers,
@@ -23,6 +24,8 @@ import {
   type SendChannel
 } from './ipc'
 import { NotesStore } from './notes'
+import { buildScriptHtml } from './pdf'
+import { writePdf } from './pdf/render'
 import { buildDayRollup, renderScreenplay, searchScenes } from './reel'
 import { DayCache } from './reel/cache'
 import { GAP_MS, IDLE_MS } from './reel/rules'
@@ -31,6 +34,7 @@ import { cleanupExpired } from './retention'
 import { MAX_BASE64_LENGTH, decodePngBase64, sanitizeImageName } from './save-image'
 import { isLocalRequest, isTrustedFrameUrl, isTrustedSenderInfo, type TrustedOrigin } from './security'
 import { SettingsStore } from './settings'
+import { registerShortcuts, type ShortcutResult } from './shortcuts'
 import { DayStore, localDate } from './store'
 import { WriteBuffer } from './store/buffer'
 import { createTray, type TrayHandle } from './tray'
@@ -55,6 +59,8 @@ let cache: DayCache
 let writeBuffer: WriteBuffer | null = null
 let capture: Capture | null = null
 let hud: HudHandle | null = null
+let shortcuts: ShortcutResult | null = null
+let shortcutWarning: string | null = null
 let tray: TrayHandle | null = null
 let mainWindow: BrowserWindow | null = null
 let tickTimer: NodeJS.Timeout | null = null
@@ -142,6 +148,7 @@ function trayStateOf(state: LiveState): TrayState {
     captureError: state.captureError,
     storageError: state.storageError,
     hudVisible: settings.get().hud.visible,
+    shortcutWarning,
     activeMs: state.day.activeMs
   }
 }
@@ -211,6 +218,23 @@ async function exportEdl(rawDate: unknown): Promise<{ path: string }> {
   const target = ensureExtension(result.filePath, 'edl')
   // 写盘失败抛可读错误；IPC 层会把 rejection 交给界面提示（不静默）
   await writeEdlFile(target, rollupFor(date))
+  return { path: target }
+}
+
+/** 剧本 PDF 导出（规格 R53）：日期校验 → 对话框 → 固定 .pdf 扩展名 → 隐藏窗口打印 → 写盘。 */
+async function exportPdf(rawDate: unknown): Promise<{ path: string }> {
+  const date = parseEdlDate(rawDate)
+  if (!date) return { path: '' }
+  const options = {
+    defaultPath: `dayfilm-${date}.pdf`,
+    filters: [{ name: 'PDF 文档', extensions: ['pdf'] }]
+  }
+  const focused = BrowserWindow.getFocusedWindow()
+  const result = focused ? await dialog.showSaveDialog(focused, options) : await dialog.showSaveDialog(options)
+  if (result.canceled || !result.filePath) return { path: '' }
+  const target = ensureExtension(result.filePath, 'pdf')
+  const html = buildScriptHtml(rollupFor(date), { note: notes.get(date), projects: settings.get().projects })
+  await writePdf(html, target)
   return { path: target }
 }
 
@@ -299,6 +323,7 @@ function registerIpc(): void {
     },
     saveImage: (defaultName, pngBase64) => saveImage(defaultName, pngBase64),
     exportEdl: (date) => exportEdl(date),
+    exportPdf: (date) => exportPdf(date),
     setHud: (visible) => setHudVisible(visible),
     quit: () => {
       quitApp()
@@ -509,6 +534,35 @@ function setupHud(): void {
   hud.setVisible(settings.get().hud.visible)
 }
 
+/**
+ * 全局快捷键（规格 R54）：HUD 开关与放映切换。被占用时只记录 + 托盘提示一次，
+ * 不重试、不阻塞启动。
+ */
+function setupShortcuts(): void {
+  shortcuts = registerShortcuts(
+    {
+      register: (accelerator, callback) => globalShortcut.register(accelerator, callback),
+      unregisterAll: () => globalShortcut.unregisterAll()
+    },
+    {
+      toggleHud: () => {
+        setHudVisible(!settings.get().hud.visible)
+      },
+      toggleProjection: () => {
+        showWindow()
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send(PROJECTION_TOGGLE_CHANNEL)
+        }
+      }
+    }
+  )
+  if (shortcuts.failures.length > 0) {
+    shortcutWarning = '快捷键被占用'
+    // 只记一次，不重试
+    console.warn('[dayfilm] 全局快捷键注册失败', shortcuts.failures.join(', '))
+  }
+}
+
 function setupPowerMonitor(): void {  powerMonitor.on('suspend', () => {
     stopCapture()
   })
@@ -564,6 +618,7 @@ if (!app.requestSingleInstanceLock()) {
     createWindow()
     if (!isPaused()) startCapture()
     registerIpc()
+    setupShortcuts()
     setupTray()
     setupHud()
     setupPowerMonitor()
@@ -588,6 +643,8 @@ if (!app.requestSingleInstanceLock()) {
     tray = null
     hud?.destroy()
     hud = null
+    shortcuts?.unregisterAll()
+    shortcuts = null
   })
 
   app.on('window-all-closed', () => {

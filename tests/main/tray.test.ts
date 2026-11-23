@@ -11,7 +11,14 @@ import {
   type TrayState
 } from '../../src/main/tray/tooltip'
 
-const IDLE: TrayState = { paused: false, captureError: null, storageError: null, hudVisible: true, activeMs: 0 }
+const IDLE: TrayState = {
+  paused: false,
+  captureError: null,
+  storageError: null,
+  hudVisible: true,
+  shortcutWarning: null,
+  activeMs: 0
+}
 const ALL: ReadonlySet<TrayMood> = new Set<TrayMood>(['active', 'paused', 'error'])
 
 describe('trayStatusLabel', () => {
@@ -39,6 +46,14 @@ describe('trayTooltip', () => {
 
   it('提示里不含窗口标题', () => {
     expect(trayTooltip({ ...IDLE, captureError: 'x', activeMs: 0 })).toBe('Dayfilm · 出错')
+  })
+
+  it('快捷键被占用时在末尾加一句，不影响状态', () => {
+    expect(trayTooltip({ ...IDLE, shortcutWarning: '快捷键被占用' })).toBe('Dayfilm · 采集中 · 快捷键被占用')
+    expect(trayTooltip({ ...IDLE, activeMs: 90_000, shortcutWarning: '快捷键被占用' })).toBe(
+      'Dayfilm · 采集中 · 今日 2 分钟 · 快捷键被占用'
+    )
+    expect(trayStatusLabel({ ...IDLE, shortcutWarning: '快捷键被占用' })).toBe('采集中')
   })
 })
 

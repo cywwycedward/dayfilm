@@ -8,6 +8,7 @@ import {
   HUD_RHYTHM_WIDTH,
   fmtHudDuration,
   hudElapsedMs,
+  hudLeaveMs,
   hudMood,
   hudView,
   rhythmBars,
@@ -82,6 +83,7 @@ describe('秒表', () => {
   })
 
   test('空闲时大数字是离开时长，不是最后一镜', () => {
+    expect(hudLeaveMs(live(null), now)).toBe(2 * MINUTE)
     expect(hudElapsedMs(live(null), now)).toBe(3 * MINUTE)
   })
 
@@ -147,16 +149,31 @@ describe('HUD 文案', () => {
     })
     expect(view.today).toEqual({ shots: 2, cuts: 3, verdict: '跳切风暴' })
     expect(view.elapsedText).toBe('01:00')
+    expect(view.elapsedPrefix).toBe('')
   })
 
-  test('空闲：显示离开键盘，秒表停', () => {
+  test('空闲：显示离开键盘，大数字是离开时长', () => {
     const view = hudView(live(null), now)
-    expect(view).toMatchObject({ mood: 'idle', status: '空闲', title: '离开键盘', ticking: false })
+    expect(view).toMatchObject({
+      mood: 'idle',
+      status: '空闲',
+      title: '离开键盘',
+      ticking: false,
+      elapsedPrefix: '离开',
+      elapsedText: '02:00'
+    })
   })
 
-  test('暂停：状态已暂停，保留应用名', () => {
+  test('暂停：状态已暂停，保留应用名与冻结的镜长', () => {
     const view = hudView(live(null, { paused: true }), now)
-    expect(view).toMatchObject({ mood: 'paused', status: '已暂停', ticking: false, exe: 'Code' })
+    expect(view).toMatchObject({
+      mood: 'paused',
+      status: '已暂停',
+      ticking: false,
+      exe: 'Code',
+      elapsedPrefix: '',
+      elapsedText: '03:00'
+    })
   })
 
   test('出错：状态错误，标题行放错误摘要', () => {

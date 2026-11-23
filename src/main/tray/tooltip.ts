@@ -7,6 +7,8 @@ export interface TrayState {
   storageError: string | null
   /** 导演 HUD 是否显示（托盘菜单里的勾选项） */
   hudVisible: boolean
+  /** 全局快捷键没注册上时的提示文案（只提示一次，不重试） */
+  shortcutWarning: string | null
   /** 当日已记录（非空闲）时长 */
   activeMs: number
 }
@@ -48,10 +50,11 @@ export function trayIconFile(state: TrayState, available: ReadonlySet<TrayMood>)
   return TRAY_ICON_FILES[resolveTrayMood(state, available)]
 }
 
-/** `Dayfilm · 采集中 · 今日 1 小时 12 分钟`（规格 R12.2）。 */
+/** `Dayfilm · 采集中 · 今日 1 小时 12 分钟`（规格 R12.2），快捷键被占用时再接一句。 */
 export function trayTooltip(state: TrayState): string {
   const parts = [`Dayfilm · ${trayStatusLabel(state)}`]
   if (state.activeMs > 0) parts.push(`今日 ${formatDurationSpan(state.activeMs)}`)
+  if (state.shortcutWarning) parts.push(state.shortcutWarning)
   return parts.join(' · ')
 }
 

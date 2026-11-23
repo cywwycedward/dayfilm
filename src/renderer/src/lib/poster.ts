@@ -23,8 +23,71 @@ const PRINT_GAP = 24
 const PRINT_CAPTION_GAP = 20
 const PRINT_ROW_GAP = 26
 const RULER_TICKS = 12
+/** 三项数字之间至少留的横向间隔 */
+const METRIC_GAP = 40
+
+export type PosterTheme = 'classic' | 'noir' | 'minimal'
+
+export const POSTER_THEMES: readonly { id: PosterTheme; label: string }[] = [
+  { id: 'classic', label: '经典' },
+  { id: 'noir', label: '黑色电影' },
+  { id: 'minimal', label: '极简' }
+]
+
+export interface PosterPalette {
+  background: string
+  /** 胶片带与印相框的底色 */
+  panel: string
+  paper: string
+  dim: string
+  muted: string
+  hairline: string
+  accent: string
+  body: string
+}
+
+const PALETTES: Record<PosterTheme, PosterPalette> = {
+  classic: {
+    background: '#0a0b0d',
+    panel: '#101216',
+    paper: '#ece7dc',
+    dim: 'rgba(236,231,220,.55)',
+    muted: 'rgba(236,231,220,.4)',
+    hairline: 'rgba(236,231,220,.12)',
+    accent: '#e8b45a',
+    body: 'rgba(236,231,220,.7)'
+  },
+  noir: {
+    background: '#07080a',
+    panel: '#0c0d10',
+    paper: '#f2ede2',
+    dim: 'rgba(242,237,226,.5)',
+    muted: 'rgba(242,237,226,.34)',
+    hairline: 'rgba(242,237,226,.16)',
+    accent: '#b8524a',
+    body: 'rgba(242,237,226,.72)'
+  },
+  minimal: {
+    background: '#efece4',
+    panel: '#e4e0d6',
+    paper: '#14161a',
+    dim: 'rgba(20,22,26,.5)',
+    muted: 'rgba(20,22,26,.38)',
+    hairline: 'rgba(20,22,26,.14)',
+    accent: '#14161a',
+    body: 'rgba(20,22,26,.7)'
+  }
+}
+
+/** 胶片带高度：黑色电影只剩一条细缝，极简没有胶片带。 */
+const STRIP_HEIGHT: Record<PosterTheme, number> = { classic: 150, noir: 28, minimal: 0 }
 
 export type PosterTone = 'display' | 'title' | 'label' | 'body' | 'muted' | 'accent'
+
+/** 主题只决定配色与取舍，版式坐标大部分共用。 */
+export function posterPalette(theme: PosterTheme): PosterPalette {
+  return PALETTES[theme]
+}
 
 export interface PosterText {
   x: number
@@ -36,6 +99,8 @@ export interface PosterText {
   family: 'display' | 'ui' | 'mono'
   align?: 'left' | 'right'
   maxWidth?: number
+  /** 负值收紧字距；黑色电影标题用 */
+  letterSpacing?: number
 }
 
 export interface PosterRect {
@@ -84,8 +149,10 @@ export interface PosterLayout {
   width: number
   height: number
   date: string
+  theme: PosterTheme
+  palette: PosterPalette
   columns: { left: { x: number; w: number }; right: { x: number; w: number } }
-  /** 背景题材水印 */
+  /** 背景题材水印；极简主题不画 */
   backdrop: {
     text: string
     x: number
@@ -96,10 +163,11 @@ export interface PosterLayout {
     clip: { x: number; y: number; w: number; h: number }
     /** 左缘渐显宽度，避免硬剪切痕 */
     fade: number
-  }
+  } | null
   texts: PosterText[]
-  film: PosterRect
-  holes: { top: number; bottom: number; w: number; h: number; gap: number }
+  /** 胶片带；极简主题没有 */
+  film: PosterRect | null
+  holes: { top: number; bottom: number; w: number; h: number; gap: number } | null
   blocks: PosterBlock[]
   ruler: { y: number; x0: number; x1: number; ticks: PosterTick[] }
   prints: PosterPrint[]
@@ -115,6 +183,8 @@ export interface PosterInput {
   day: DayRollup
   projects: readonly ProjectRule[]
   note: string
+  /** 不传就是经典主题 */
+  theme?: PosterTheme
 }
 
 /** 估算文本宽度（中文按 1em，ASCII 按 0.55em），太长就按宽度断行。 */
@@ -137,6 +207,13 @@ export function wrapText(text: string, maxWidthPx: number, fontSize: number): st
   }
   if (current.length > 0) lines.push(current)
   return lines
+}
+
+/** 等宽字体文本宽度估算：CJK 回落按全宽 1em，ASCII 按 Plex Mono 的 0.6em。 */
+function monoTextWidth(text: string, size: number): number {
+  let width = 0
+  for (const char of text) width += (char.charCodeAt(0) > 0x2e80 ? 1 : 0.6) * size
+  return width
 }
 
 /** 单行截断：超出宽度就补省略号。 */
@@ -215,6 +292,11 @@ function longestUnused(candidates: readonly Scene[], used: ReadonlySet<string>):
 
 export function computePoster(input: PosterInput): PosterLayout {
   const { day, projects, note } = input
+  const theme = input.theme ?? 'classic'
+  const palette = posterPalette(theme)
+  const minimal = theme === 'minimal'
+  const noir = theme === 'noir'
+  const stripHeight = STRIP_HEIGHT[theme]
   const shots = day.scenes.filter((scene) => scene.kind === 'shot')
   const date = day.date
   const noteWidth = COLUMN_LEFT.w - 24
@@ -230,9 +312,18 @@ export function computePoster(input: PosterInput): PosterLayout {
       tone: 'muted',
       text: dateLine(day)
     },
-    { x: COLUMN_LEFT.x, y: 270, size: 96, weight: 700, family: 'ui', tone: 'display', text: genre },
-    ...wrapText(day.verdict.note, COLUMN_LEFT.w, 16)
-      .slice(0, 2)
+    {
+      x: COLUMN_LEFT.x,
+      y: 270,
+      size: 96,
+      weight: 700,
+      family: 'ui',
+      tone: 'display',
+      text: genre,
+      ...(noir ? { letterSpacing: -2 } : {})
+    },
+    // 极简只留日期、题材、数字与一句手记，点评不进海报
+    ...(minimal ? [] : wrapText(day.verdict.note, COLUMN_LEFT.w, 16).slice(0, 2))
       .map((line, index) => ({
         x: COLUMN_LEFT.x,
         y: 312 + index * 26,
@@ -249,11 +340,13 @@ export function computePoster(input: PosterInput): PosterLayout {
     ['镜头', String(shots.length)],
     ['剪辑', String(day.cuts)]
   ]
-  metrics.forEach(([label, value], index) => {
-    const x = COLUMN_LEFT.x + index * 200
-    texts.push({ x, y: 400, size: 12, weight: 400, family: 'mono', tone: 'muted', text: label })
-    texts.push({ x, y: 456, size: 56, weight: 400, family: 'mono', tone: 'title', text: value })
-  })
+  // 三列按内容的估算宽度排开：时长可能是「12 小时 34 分」，固定 200px 会把数字压到相邻列
+  let metricX = COLUMN_LEFT.x
+  for (const [label, value] of metrics) {
+    texts.push({ x: metricX, y: 400, size: 12, weight: 400, family: 'mono', tone: 'muted', text: label })
+    texts.push({ x: metricX, y: 456, size: 56, weight: 400, family: 'mono', tone: 'title', text: value })
+    metricX += Math.round(Math.max(monoTextWidth(value, 56), monoTextWidth(label, 12)) + METRIC_GAP)
+  }
   texts.push({
     x: COLUMN_LEFT.x,
     y: 832,
@@ -266,10 +359,11 @@ export function computePoster(input: PosterInput): PosterLayout {
 
   const firstAt = shots.length > 0 ? shots[0].start : null
   const lastAt = shots.length > 0 ? shots[shots.length - 1].end : null
-  const film: PosterRect = { x: COLUMN_RIGHT.x, y: 140, w: COLUMN_RIGHT.w, h: 150 }
+  const film: PosterRect | null =
+    stripHeight > 0 ? { x: COLUMN_RIGHT.x, y: 140, w: COLUMN_RIGHT.w, h: stripHeight } : null
 
   const blocks: PosterBlock[] = []
-  if (firstAt !== null && lastAt !== null && lastAt > firstAt) {
+  if (film !== null && firstAt !== null && lastAt !== null && lastAt > firstAt) {
     const span = lastAt - firstAt
     // 镜头过多时抽样，保证绘制量可控；抽样仍按素材区间铺满
     const step = shots.length > 160 ? Math.ceil(shots.length / 160) : 1
@@ -288,34 +382,39 @@ export function computePoster(input: PosterInput): PosterLayout {
   }
 
   const ruler = {
-    y: film.y + film.h + 22,
-    x0: film.x,
-    x1: film.x + film.w,
-    ticks: firstAt !== null && lastAt !== null ? rulerTicks(firstAt, lastAt) : []
+    y: film !== null ? film.y + film.h + 22 : 0,
+    x0: COLUMN_RIGHT.x,
+    x1: COLUMN_RIGHT.x + COLUMN_RIGHT.w,
+    ticks: film !== null && firstAt !== null && lastAt !== null ? rulerTicks(firstAt, lastAt) : []
   }
 
   const prints: PosterPrint[] = []
   const used = new Set<string>()
   const longestSeconds = Math.max(1, ...shots.map((scene) => scene.seconds))
-  // 四张等宽卡片居中排在右栏：340×2 + 24 = 704，两侧各留 28
-  const gridX = COLUMN_RIGHT.x + Math.round((COLUMN_RIGHT.w - (PRINT_W * 2 + PRINT_GAP)) / 2)
+  // 经典四张两列，两侧各留 28；黑色电影只留一张最大图，放大后居中
+  const printW = noir ? 540 : PRINT_W
+  const printH = noir ? 303 : PRINT_H
+  const printTop = noir ? 240 : 356
+  const gridX = noir
+    ? COLUMN_RIGHT.x + Math.round((COLUMN_RIGHT.w - printW) / 2)
+    : COLUMN_RIGHT.x + Math.round((COLUMN_RIGHT.w - (PRINT_W * 2 + PRINT_GAP)) / 2)
   const pushPrint = (scene: Scene | null): void => {
     if (!scene || used.has(scene.id)) return
     used.add(scene.id)
     const index = prints.length
-    const x = gridX + (index % 2) * (PRINT_W + PRINT_GAP)
-    const y = 356 + Math.floor(index / 2) * (PRINT_H + PRINT_CAPTION_GAP + 12 + PRINT_ROW_GAP)
+    const x = noir ? gridX : gridX + (index % 2) * (PRINT_W + PRINT_GAP)
+    const y = printTop + Math.floor(index / 2) * (printH + PRINT_CAPTION_GAP + 12 + PRINT_ROW_GAP)
     const ordinal = shots.indexOf(scene) + 1
     prints.push({
       x,
       y,
-      w: PRINT_W,
-      h: PRINT_H,
+      w: printW,
+      h: printH,
       exe: scene.exe,
       title: scene.title.length > 0 ? scene.title : '—',
       index: ordinal,
       caption: `${fmtClock(scene.start)}–${fmtClock(scene.end)} · ${fmtDuration(scene.seconds)}`,
-      captionY: y + PRINT_H + PRINT_CAPTION_GAP,
+      captionY: y + printH + PRINT_CAPTION_GAP,
       start: scene.start,
       end: scene.end,
       seconds: scene.seconds,
@@ -329,20 +428,25 @@ export function computePoster(input: PosterInput): PosterLayout {
   const topProcess = day.topApps[0]?.exe ?? null
   const projectTotal = totalByProject(day.scenes, projects)[0]?.name ?? null
   const busiest = busiestWindow(shots)
-  pushPrint(longest)
-  pushPrint(longestUnused(busiest.shots, used))
-  let processShots: Scene[] = []
-  if (topProcess) {
-    processShots = shots.filter((scene) => scene.exe === topProcess)
-  } else if (projectTotal) {
-    const needle = projectTotal.toLowerCase()
-    processShots = shots.filter((scene) => scene.title.toLowerCase().includes(needle))
+  if (!minimal) {
+    // 黑色电影只留最早的那张“最大图”；经典按最长/最密/第一进程/末镜各一张
+    pushPrint(longest)
+    if (!noir) {
+      pushPrint(longestUnused(busiest.shots, used))
+      let processShots: Scene[] = []
+      if (topProcess) {
+        processShots = shots.filter((scene) => scene.exe === topProcess)
+      } else if (projectTotal) {
+        const needle = projectTotal.toLowerCase()
+        processShots = shots.filter((scene) => scene.title.toLowerCase().includes(needle))
+      }
+      pushPrint(longestUnused(processShots, used))
+      // 第四张：当天最后一个镜头；若已被占用就往前找，保证四张不重复
+      pushPrint([...shots].reverse().find((scene) => !used.has(scene.id)) ?? null)
+    }
   }
-  pushPrint(longestUnused(processShots, used))
-  // 第四张：当天最后一个镜头；若已被占用就往前找，保证四张不重复
-  pushPrint([...shots].reverse().find((scene) => !used.has(scene.id)) ?? null)
 
-  const noteLines = wrapText(note, noteWidth, 18).slice(0, 3)
+  const noteLines = wrapText(note, noteWidth, 18).slice(0, minimal ? 1 : 3)
   const noteBlock: PosterNote | null =
     noteLines.length > 0
       ? {
@@ -376,19 +480,28 @@ export function computePoster(input: PosterInput): PosterLayout {
     width: POSTER_WIDTH,
     height: POSTER_HEIGHT,
     date,
+    theme,
+    palette,
     columns: { left: COLUMN_LEFT, right: COLUMN_RIGHT },
-    backdrop: {
-      text: genre,
-      x: COLUMN_RIGHT.x + COLUMN_RIGHT.w,
-      y: 760,
-      size: 280,
-      opacity: 0.04,
-      clip: { x: COLUMN_RIGHT.x, y: 0, w: COLUMN_RIGHT.w, h: POSTER_HEIGHT },
-      fade: 120
-    },
+    backdrop: minimal
+      ? null
+      : {
+          text: genre,
+          x: COLUMN_RIGHT.x + COLUMN_RIGHT.w,
+          y: 760,
+          size: 280,
+          opacity: noir ? 0.06 : 0.04,
+          clip: { x: COLUMN_RIGHT.x, y: 0, w: COLUMN_RIGHT.w, h: POSTER_HEIGHT },
+          fade: 120
+        },
     texts,
     film,
-    holes: { top: film.y + 6, bottom: film.y + film.h - 14, w: 10, h: 8, gap: 28 },
+    holes:
+      film === null
+        ? null
+        : film.h < 40
+          ? { top: film.y + 4, bottom: film.y + film.h - 8, w: 8, h: 4, gap: 22 }
+          : { top: film.y + 6, bottom: film.y + film.h - 14, w: 10, h: 8, gap: 28 },
     blocks,
     ruler,
     prints,

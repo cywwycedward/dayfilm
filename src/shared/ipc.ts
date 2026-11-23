@@ -14,6 +14,7 @@ export const IPC = {
   setNote: 'dayfilm:set-note',
   saveImage: 'dayfilm:save-image',
   exportEdl: 'dayfilm:export-edl',
+  exportPdf: 'dayfilm:export-pdf',
   setHud: 'dayfilm:set-hud',
   quit: 'dayfilm:quit',
   tick: 'dayfilm:tick'
@@ -37,6 +38,8 @@ export interface DayfilmApi {
   saveImage(defaultName: string, pngBase64: string): Promise<{ path: string }>
   /** 把某一天导出成 CMX3600 EDL（24fps），返回落盘路径；取消返回空串。 */
   exportEdl(date: string): Promise<{ path: string }>
+  /** 把某一天的剧本导出成 PDF，返回落盘路径；取消返回空串。 */
+  exportPdf(date: string): Promise<{ path: string }>
   /** 显示/隐藏导演 HUD，返回切换后的状态。 */
   setHud(visible: boolean): Promise<{ visible: boolean }>
   /** 真正退出应用（含停止采集）。 */
@@ -45,8 +48,15 @@ export interface DayfilmApi {
   onTick(cb: (state: LiveState) => void): () => void
 }
 
+/** 主进程推给界面的放映切换事件（全局快捷键 Ctrl+Alt+P）。 */
+export interface ProjectionBridge {
+  onToggle(cb: () => void): () => void
+}
+
 declare global {
   interface Window {
     dayfilm: DayfilmApi
+    /** 打包/开发环境都会注入；缺失时界面应忽略该能力。 */
+    dayfilmProjection?: ProjectionBridge
   }
 }

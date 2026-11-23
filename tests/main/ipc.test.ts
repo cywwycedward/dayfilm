@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   GUARDED_CHANNELS,
   HUD_OPEN_CHANNEL,
+  OUTBOUND_CHANNELS,
+  PROJECTION_TOGGLE_CHANNEL,
   SEND_CHANNELS,
   createHandlers,
   createSendHandlers,
@@ -57,6 +59,7 @@ function fakeDeps(): IpcDeps & { calls: Array<[string, unknown[]]> } {
     setNote: track('setNote', '今天拍得不错'),
     saveImage: track('saveImage', { path: '' }),
     exportEdl: track('exportEdl', { path: '' }),
+    exportPdf: track('exportPdf', { path: '' }),
     setHud: track('setHud', { visible: true }),
     quit: track('quit', undefined)
   }
@@ -110,6 +113,7 @@ describe('IPC 通道表', () => {
     handlers[IPC.setNote]('2026-11-22', '加油')
     handlers[IPC.saveImage]('poster', 'iVBORw0KGgo=')
     handlers[IPC.exportEdl]('2026-11-22')
+    handlers[IPC.exportPdf]('2026-11-22')
     handlers[IPC.setHud](false)
     handlers[IPC.quit]()
     expect(deps.calls).toEqual([
@@ -124,6 +128,7 @@ describe('IPC 通道表', () => {
       ['setNote', ['2026-11-22', '加油']],
       ['saveImage', ['poster', 'iVBORw0KGgo=']],
       ['exportEdl', ['2026-11-22']],
+      ['exportPdf', ['2026-11-22']],
       ['setHud', [false]],
       ['quit', []]
     ])
@@ -155,5 +160,15 @@ describe('单向 send 通道', () => {
     expect(Object.keys(handlers).sort()).toEqual([...Object.values(SEND_CHANNELS)].sort())
     for (const channel of Object.values(SEND_CHANNELS)) handlers[channel]()
     expect(calls).toEqual(['hudOpen'])
+  })
+})
+
+describe('主进程 → 渲染进程通道', () => {
+  it('放映切换通道登记在案，且不与其它通道撞名', () => {
+    const outbound = Object.values(OUTBOUND_CHANNELS)
+    expect(outbound).toEqual([PROJECTION_TOGGLE_CHANNEL])
+    const inUse = [...Object.values(GUARDED_CHANNELS), ...Object.values(SEND_CHANNELS), IPC.tick] as string[]
+    expect(outbound.filter((channel) => inUse.includes(channel))).toEqual([])
+    for (const channel of outbound) expect(channel.startsWith('dayfilm:')).toBe(true)
   })
 })

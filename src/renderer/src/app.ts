@@ -9,7 +9,16 @@ import {
 import { createSource, type DayfilmSource } from './data'
 import { sceneAt } from './lib/reel'
 import { pickHighlights } from './lib/highlights'
-import { computePoster } from './lib/poster'
+import { POSTER_THEMES, computePoster, type PosterTheme } from './lib/poster'
+import {
+  compareDays,
+  deltaDirection,
+  formatDelta,
+  type CompareDiffItem,
+  type CompareResult,
+  type CompareSide
+} from './lib/compare-days'
+import { CALENDAR_DAYS, calendarCells, calendarDates, type CalendarCell, type CalendarDay } from './lib/calendar'
 import { buildWeek, lastSevenDates, type WeekCell } from './lib/week'
 import {
   buildWeekFilm,
@@ -48,7 +57,14 @@ import {
   isoDate,
   startOfDay
 } from './lib/time'
-import { paintDensity, paintPoster, paintReel, paintWeekBars, sizeCanvas } from './paint'
+import {
+  paintCompareStrip,
+  paintDensity,
+  paintPoster,
+  paintReel,
+  paintWeekBars,
+  sizeCanvas
+} from './paint'
 import {
   onStillFontsReady,
   paintProjectionBoard,
@@ -134,6 +150,14 @@ interface State {
   weekLastDays: WeekDay[]
   weekFilm: WeekFilm | null
   weekLoading: boolean
+  /** 对比浮层：两个日期与已取回的一天 */
+  compareOpen: boolean
+  compareDates: { left: string; right: string }
+  compareCache: Map<string, DayRollup | null>
+  /** 日历浮层：已载入的天（失败按无数据记） */
+  calendarOpen: boolean
+  calendarDays: Map<string, CalendarDay>
+  calendarLoading: boolean
 }
 
 interface Ui {
@@ -195,6 +219,21 @@ interface Ui {
   builtinTerms: HTMLElement
   exportPosterBtn: HTMLButtonElement
   exportEdlBtn: HTMLButtonElement
+  exportPdfBtn: HTMLButtonElement
+  posterMenu: HTMLElement
+  compareOpenBtn: HTMLButtonElement
+  compare: HTMLElement
+  compareScrim: HTMLElement
+  compareClose: HTMLButtonElement
+  compareLeft: HTMLElement
+  compareRight: HTMLElement
+  compareDiff: HTMLElement
+  calendarOpenBtn: HTMLButtonElement
+  calendar: HTMLElement
+  calendarScrim: HTMLElement
+  calendarClose: HTMLButtonElement
+  calendarGrid: HTMLElement
+  calendarProgress: HTMLElement
   zoomIn: HTMLButtonElement
   zoomOut: HTMLButtonElement
   zoomFit: HTMLButtonElement
@@ -271,6 +310,10 @@ let projection: ProjectionState = EMPTY_PROJECTION
 let projectionRaf = 0
 let projectionLast = 0
 let projectionCutsText = ''
+/** 海报主题只记本次会话：重开回经典（R50.5） */
+let posterTheme: PosterTheme = 'classic'
+let compareResult: CompareResult | null = null
+let compareRenderToken = 0
 const projectorAudio = createProjectorAudio()
 
 function dayStart(): number {
@@ -376,6 +419,21 @@ function collect(root: HTMLElement): Ui {
     builtinTerms: pick<HTMLElement>('builtinTerms'),
     exportPosterBtn: pick<HTMLButtonElement>('exportPoster'),
     exportEdlBtn: pick<HTMLButtonElement>('exportEdl'),
+    exportPdfBtn: pick<HTMLButtonElement>('exportPdf'),
+    posterMenu: pick<HTMLElement>('posterMenu'),
+    compareOpenBtn: pick<HTMLButtonElement>('compareOpen'),
+    compare: pick<HTMLElement>('compare'),
+    compareScrim: pick<HTMLElement>('compareScrim'),
+    compareClose: pick<HTMLButtonElement>('compareClose'),
+    compareLeft: pick<HTMLElement>('compareLeft'),
+    compareRight: pick<HTMLElement>('compareRight'),
+    compareDiff: pick<HTMLElement>('compareDiff'),
+    calendarOpenBtn: pick<HTMLButtonElement>('calendarOpen'),
+    calendar: pick<HTMLElement>('calendar'),
+    calendarScrim: pick<HTMLElement>('calendarScrim'),
+    calendarClose: pick<HTMLButtonElement>('calendarClose'),
+    calendarGrid: pick<HTMLElement>('calendarGrid'),
+    calendarProgress: pick<HTMLElement>('calendarProgress'),
     zoomIn: pick<HTMLButtonElement>('zoomIn'),
     zoomOut: pick<HTMLButtonElement>('zoomOut'),
     zoomFit: pick<HTMLButtonElement>('zoomFit'),
@@ -1668,10 +1726,32 @@ async function applySettings(patch: Partial<Settings>): Promise<boolean> {
   }
 }
 
-function panelFocusables(): HTMLElement[] {
+/** 可Tab到达的元素（浮层内焦点不跑到背景页面）。 */
+function focusables(root: HTMLElement): HTMLElement[] {
   const selector =
     'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-  return [...ui.panel.querySelectorAll<HTMLElement>(selector)].filter((element) => element.offsetParent !== null)
+  return [...root.querySelectorAll<HTMLElement>(selector)].filter((element) => element.offsetParent !== null)
+}
+
+/** Tab / Shift+Tab 在 root 内循环。 */
+function trapTab(event: KeyboardEvent, root: HTMLElement): void {
+  if (event.key !== 'Tab') return
+  const items = focusables(root)
+  if (items.length === 0) {
+    event.preventDefault()
+    return
+  }
+  const active = document.activeElement
+  const index = active instanceof HTMLElement ? items.indexOf(active) : -1
+  const first = items[0]
+  const last = items[items.length - 1]
+  if (event.shiftKey && index <= 0) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && (index < 0 || index === items.length - 1)) {
+    event.preventDefault()
+    first.focus()
+  }
 }
 
 function openPanel(): void {
@@ -1702,23 +1782,7 @@ function onPanelKey(event: KeyboardEvent): void {
     closePanel()
     return
   }
-  if (event.key !== 'Tab') return
-  const items = panelFocusables()
-  if (items.length === 0) {
-    event.preventDefault()
-    return
-  }
-  const active = document.activeElement
-  const index = active instanceof HTMLElement ? items.indexOf(active) : -1
-  const first = items[0]
-  const last = items[items.length - 1]
-  if (event.shiftKey && index <= 0) {
-    event.preventDefault()
-    last.focus()
-  } else if (!event.shiftKey && (index < 0 || index === items.length - 1)) {
-    event.preventDefault()
-    first.focus()
-  }
+  trapTab(event, ui.panel)
 }
 
 async function quitApp(): Promise<void> {
@@ -1943,7 +2007,7 @@ if (cards.length === 0) {
 
 /* 海报 --------------------------------------------------------------- */
 
-async function exportPoster(): Promise<void> {
+async function exportPoster(theme: PosterTheme): Promise<void> {
   if (state.day.scenes.length === 0) {
     toast('当天还没有素材，无法导出海报')
     return
@@ -1953,7 +2017,8 @@ async function exportPoster(): Promise<void> {
     const layout = computePoster({
       day: state.day,
       projects: state.settings.projects,
-      note: state.note
+      note: state.note,
+      theme
     })
     const canvas = document.createElement('canvas')
     canvas.width = layout.width
@@ -1984,6 +2049,343 @@ async function exportEdlNow(): Promise<void> {
     toast(`EDL 导出失败：${messageOf(error)}`)
   } finally {
     ui.exportEdlBtn.disabled = false
+  }
+}
+
+/* 剧本 PDF（R53） -------------------------------------------------------*/
+
+async function exportPdfNow(): Promise<void> {
+  if (state.day.scenes.length === 0) {
+    toast('当天还没有素材，无法导出 PDF')
+    return
+  }
+  ui.exportPdfBtn.disabled = true
+  try {
+    const { path } = await state.source.exportPdf(state.date)
+    if (path.length > 0) toast(`PDF 已导出：${path}`)
+    else if (state.source.mode === 'mock') toast('演示环境不支持导出 PDF')
+    else toast('已取消导出 PDF')
+  } catch (error) {
+    toast(`PDF 导出失败：${messageOf(error)}`)
+  } finally {
+    ui.exportPdfBtn.disabled = false
+  }
+}
+
+/* 海报主题菜单（R50）----------------------------------------------------*/
+
+/** 菜单项来自 POSTER_THEMES，文案不在这里另写一份。 */
+function buildPosterMenu(): void {
+  const label = node('p', 'menu__label', '海报主题')
+  const items = POSTER_THEMES.map((theme) => {
+    const item = node('button', 'menu__item', theme.label)
+    item.type = 'button'
+    item.dataset.theme = theme.id
+    item.setAttribute('role', 'menuitem')
+    return item
+  })
+  ui.posterMenu.replaceChildren(label, ...items)
+}
+
+function openPosterMenu(): void {
+  const rect = ui.exportPosterBtn.getBoundingClientRect()
+  ui.posterMenu.hidden = false
+  ui.exportPosterBtn.setAttribute('aria-expanded', 'true')
+  const width = ui.posterMenu.offsetWidth
+  const left = Math.max(8, Math.min(window.innerWidth - width - 8, rect.right - width))
+  ui.posterMenu.style.left = `${left}px`
+  ui.posterMenu.style.top = `${rect.bottom + 6}px`
+  ui.posterMenu.querySelector<HTMLElement>('.menu__item')?.focus()
+}
+
+function togglePosterMenu(): void {
+  if (ui.posterMenu.hidden) openPosterMenu()
+  else closePosterMenu()
+}
+
+function closePosterMenu(): void {
+  if (ui.posterMenu.hidden) return
+  ui.posterMenu.hidden = true
+  ui.exportPosterBtn.setAttribute('aria-expanded', 'false')
+}
+
+/** Esc 关菜单、上下键在主题之间移焦点（菜单是 role=menu）。 */
+function onPosterMenuKey(event: KeyboardEvent): void {
+  if (ui.posterMenu.hidden) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    closePosterMenu()
+    ui.exportPosterBtn.focus({ preventScroll: true })
+    return
+  }
+  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+  const items = [...ui.posterMenu.querySelectorAll<HTMLElement>('.menu__item')]
+  if (items.length === 0) return
+  event.preventDefault()
+  const index = items.indexOf(document.activeElement as HTMLElement)
+  const step = event.key === 'ArrowDown' ? 1 : -1
+  const next = (index + step + items.length) % items.length
+  items[next]?.focus()
+}
+
+/* 双日对比（R51）--------------------------------------------------------*/
+
+const COMPARE_LOOKBACK = 7
+
+/** 取一天给对比用：缓存包含失败（null），不反复打主进程。 */
+async function compareDay(date: string): Promise<DayRollup | null> {
+  const cached = state.compareCache.get(date)
+  if (cached !== undefined) return cached
+  try {
+    const day = await state.source.getDay(date)
+    state.compareCache.set(date, day)
+    return day
+  } catch {
+    state.compareCache.set(date, null)
+    return null
+  }
+}
+
+/** 默认对照：今天之前最近一个真有镜头的天；都空就退回上一天。 */
+async function previousDataDate(today: string): Promise<string> {
+  const candidates = state.dates
+    .filter((date) => date < today)
+    .sort()
+    .reverse()
+    .slice(0, COMPARE_LOOKBACK)
+  for (const date of candidates) {
+    const day = await compareDay(date)
+    if (day !== null && day.scenes.some((scene) => scene.kind === 'shot')) return date
+  }
+  return candidates[0] ?? today
+}
+
+async function openCompare(): Promise<void> {
+  if (state.compareOpen) return
+  state.compareOpen = true
+  ui.compare.hidden = false
+  const today = isoDate(Date.now())
+  if (state.compareDates.left === '' || state.compareDates.right === '') {
+    state.compareDates = { left: today, right: await previousDataDate(today) }
+  }
+  await renderCompare()
+  // 浮层打开后焦点进到左侧日期，Tab 不出浮层
+  ui.compareLeft.querySelector<HTMLSelectElement>('select')?.focus({ preventScroll: true })
+}
+
+function closeCompare(): void {
+  if (!state.compareOpen) return
+  state.compareOpen = false
+  ui.compare.hidden = true
+  ui.compareOpenBtn.focus({ preventScroll: true })
+}
+
+function compareSideNodes(side: CompareSide, date: string, which: 'left' | 'right'): HTMLElement[] {
+  const today = isoDate(Date.now())
+  const select = node('select', 'compare__date')
+  select.dataset.side = which
+  select.setAttribute('aria-label', which === 'left' ? '左侧日期' : '右侧日期')
+  const dates = state.dates.includes(date) ? state.dates : [date, ...state.dates]
+  select.replaceChildren(
+    ...dates.map((item) => {
+      const option = node('option', undefined, fmtDateLabel(item, today))
+      option.value = item
+      return option
+    })
+  )
+  select.value = date
+
+  const genre = node('p', 'compare__genre', side.empty ? '没有采样' : side.genre)
+  const note = node('p', 'compare__note', side.empty ? '这一天没有镜头。' : side.note)
+
+  const metrics = node('dl', 'compare__metrics')
+  for (const metric of side.metrics) {
+    const cell = node('div', 'compare__metric')
+    cell.append(node('dt', undefined, metric.label), node('dd', undefined, metric.value))
+    metrics.append(cell)
+  }
+
+  const strip = node('button', 'compare__strip')
+  strip.type = 'button'
+  strip.dataset.date = date
+  strip.dataset.side = which
+  strip.disabled = side.empty
+  strip.setAttribute('aria-label', side.empty ? `${date} 没有素材` : `切到 ${date} 的日视图`)
+  strip.append(node('canvas'))
+
+  const apps = node('div', 'compare__apps')
+  if (side.apps.length === 0) {
+    apps.append(node('p', 'compare__empty', '—'))
+  } else {
+    for (const app of side.apps) {
+      const row = node('div', 'compare__app')
+      const swatch = node('i')
+      swatch.style.background = familyColor(app.hue, 0.7)
+      row.append(swatch, node('span', undefined, app.exe), node('span', undefined, app.value))
+      apps.append(row)
+    }
+  }
+
+  return [select, genre, note, metrics, strip, apps]
+}
+
+function compareDiffNodes(diff: readonly CompareDiffItem[]): HTMLElement[] {
+  return diff.map((item) => {
+    const row = node('div', 'compare__diff-row')
+    const delta = node('span', 'compare__diff-delta', formatDelta(item))
+    delta.dataset.dir = deltaDirection(item)
+    row.append(node('span', 'compare__diff-label', item.label), delta)
+    return row
+  })
+}
+
+async function renderCompare(): Promise<void> {
+  const token = ++compareRenderToken
+  const { left, right } = state.compareDates
+  const [leftDay, rightDay] = await Promise.all([compareDay(left), compareDay(right)])
+  if (token !== compareRenderToken || !state.compareOpen) return
+  compareResult = compareDays(leftDay, rightDay)
+  ui.compareLeft.replaceChildren(...compareSideNodes(compareResult.left, left, 'left'))
+  ui.compareRight.replaceChildren(...compareSideNodes(compareResult.right, right, 'right'))
+  ui.compareDiff.replaceChildren(...compareDiffNodes(compareResult.diff))
+  paintCompareStrips()
+}
+
+function paintCompareStrips(): void {
+  if (compareResult === null) return
+  for (const strip of ui.compare.querySelectorAll<HTMLElement>('.compare__strip')) {
+    const canvas = strip.querySelector('canvas')
+    if (!canvas) continue
+    const rect = strip.getBoundingClientRect()
+    if (rect.width <= 0 || rect.height <= 0) continue
+    const ctx = sizeCanvas(canvas, rect.width, rect.height)
+    if (!ctx) continue
+    const side = strip.dataset.side === 'left' ? compareResult.left : compareResult.right
+    paintCompareStrip(ctx, side.blocks, rect.width, rect.height)
+  }
+}
+
+/* 片场日历（R52）--------------------------------------------------------*/
+
+async function openCalendar(): Promise<void> {
+  if (state.calendarOpen) return
+  state.calendarOpen = true
+  ui.calendar.hidden = false
+  renderCalendar()
+  ui.calendarGrid.querySelector<HTMLElement>('button:not([disabled])')?.focus({ preventScroll: true })
+  const missing = calendarDates(isoDate(Date.now())).filter((date) => !state.calendarDays.has(date))
+  if (missing.length > 0) void loadCalendar(missing)
+}
+
+function closeCalendar(): void {
+  if (!state.calendarOpen) return
+  state.calendarOpen = false
+  ui.calendar.hidden = true
+  ui.calendarOpenBtn.focus({ preventScroll: true })
+}
+
+/** 每批 7 个并发：已载入的格子先渲染，失败的天按“无数据”记。 */
+async function loadCalendar(dates: readonly string[]): Promise<void> {
+  if (state.calendarLoading) return
+  state.calendarLoading = true
+  try {
+    for (let start = 0; start < dates.length; start += 7) {
+      const batch = dates.slice(start, start + 7)
+      await Promise.all(
+        batch.map(async (date) => {
+          try {
+            const day = await state.source.getDay(date)
+            const shots = day.scenes.filter((scene) => scene.kind === 'shot').length
+            state.calendarDays.set(date, {
+              date,
+              activeMs: day.activeMs,
+              genre: shots > 0 ? day.verdict.label : '',
+              shots
+            })
+          } catch {
+            state.calendarDays.set(date, { date, activeMs: 0, genre: '', shots: 0 })
+          }
+        })
+      )
+      renderCalendar()
+    }
+  } finally {
+    state.calendarLoading = false
+    renderCalendar()
+  }
+}
+
+function calendarCellNode(cell: CalendarCell, today: string, column: number): HTMLButtonElement {
+  const button = node('button', 'calendar__cell')
+  button.type = 'button'
+  button.dataset.date = cell.date
+  button.dataset.shots = String(cell.shots > 0)
+  // 列 = 周（标签列之后），行 = 周一→周日
+  button.style.gridColumn = String(column + 2)
+  button.style.gridRow = String(cell.dow + 2)
+  if (cell.date === today) button.classList.add('is-today')
+  if (cell.date === state.date) button.classList.add('is-active')
+  if (cell.level > 0) button.style.background = `rgba(236, 231, 220, ${cell.level.toFixed(3)})`
+  if (cell.future) {
+    button.disabled = true
+    button.dataset.future = 'true'
+    button.setAttribute('aria-label', `${cell.date} 未到`)
+    return button
+  }
+  const meta =
+    cell.activeMs > 0
+      ? `活跃 ${fmtMinutes(cell.activeMs)}${cell.genre.length > 0 ? ` · ${cell.genre}` : ''}`
+      : '无记录'
+  button.title = `${cell.date} · ${meta}`
+  button.setAttribute('aria-label', `${cell.date} · ${meta}`)
+  return button
+}
+
+const CALENDAR_ROW_LABELS = ['周一', '周三', '周五'] as const
+
+/** 左侧行标签 + 顶部每 4 列一个月份（相邻重复的月份不重复写）。 */
+function calendarLabels(cells: readonly CalendarCell[]): HTMLElement[] {
+  const labels: HTMLElement[] = []
+  let previous = ''
+  for (let column = 0; column < 12; column += 4) {
+    const date = cells[column * 7]?.date
+    if (date === undefined) continue
+    const month = `${new Date(startOfDay(date)).getMonth() + 1}月`
+    if (month === previous) continue
+    previous = month
+    const label = node('span', 'calendar__month', month)
+    label.style.gridColumn = `${column + 2} / span 4`
+    label.style.gridRow = '1'
+    labels.push(label)
+  }
+  CALENDAR_ROW_LABELS.forEach((text, index) => {
+    const label = node('span', 'calendar__row-label', text)
+    label.style.gridColumn = '1'
+    label.style.gridRow = String(index * 2 + 2)
+    labels.push(label)
+  })
+  return labels
+}
+
+function renderCalendar(): void {
+  const today = isoDate(Date.now())
+  const loaded = calendarDates(today).filter((date) => state.calendarDays.has(date)).length
+  ui.calendarProgress.textContent =
+    loaded < CALENDAR_DAYS ? `已载入 ${loaded}/${CALENDAR_DAYS}` : ''
+  if (!state.calendarOpen) return
+  // 分批载入会整格重画：把焦点落回同一个日期，键盘不会丢位置
+  const active = document.activeElement
+  const focusedDate =
+    active instanceof HTMLElement
+      ? active.closest<HTMLElement>('.calendar__cell')?.dataset.date
+      : undefined
+  const cells = calendarCells(state.calendarDays, today)
+  ui.calendarGrid.replaceChildren(
+    ...calendarLabels(cells),
+    ...cells.map((cell, index) => calendarCellNode(cell, today, Math.floor(index / 7)))
+  )
+  if (focusedDate !== undefined) {
+    ui.calendarGrid.querySelector<HTMLElement>(`[data-date="${focusedDate}"]`)?.focus({ preventScroll: true })
   }
 }
 
@@ -2434,17 +2836,102 @@ ui.search.value = ''
     event.preventDefault()
     stopProjection()
   })
+  // 浮层的 Esc：菜单 → 日历 → 对比，逐层关闭；Tab 锁在浮层内
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Tab') {
+      if (state.calendarOpen) trapTab(event, ui.calendar)
+      else if (state.compareOpen) trapTab(event, ui.compare)
+      return
+    }
+    if (event.key !== 'Escape') return
+    if (!ui.posterMenu.hidden) {
+      event.preventDefault()
+      closePosterMenu()
+      ui.exportPosterBtn.focus({ preventScroll: true })
+      return
+    }
+    if (state.calendarOpen) {
+      event.preventDefault()
+      closeCalendar()
+      return
+    }
+    if (state.compareOpen) {
+      event.preventDefault()
+      closeCompare()
+    }
+  })
+  // 全局快捷键 Ctrl+Alt+P 的放映切换（R54）；没有该能力时忽略
+  window.dayfilmProjection?.onToggle(() => {
+    if (projection.active) stopProjection()
+    else startProjection()
+  })
   ui.zoomIn.addEventListener('click', () => zoomBy(1.6))
   ui.zoomOut.addEventListener('click', () => zoomBy(1 / 1.6))
   ui.zoomReset.addEventListener('click', () => applyView(fullDay(dayStart())))
   ui.zoomFit.addEventListener('click', () =>
     applyView(fitView(state.day.firstAt, state.day.lastAt, dayStart()))
   )
-  ui.exportPosterBtn.addEventListener('click', () => {
-    void exportPoster()
+  ui.exportPosterBtn.addEventListener('click', togglePosterMenu)
+  ui.posterMenu.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const item = target.closest<HTMLElement>('[data-theme]')
+    const theme = item?.dataset.theme
+    if (theme !== 'classic' && theme !== 'noir' && theme !== 'minimal') return
+    posterTheme = theme
+    closePosterMenu()
+    void exportPoster(posterTheme)
+  })
+  ui.posterMenu.addEventListener('keydown', onPosterMenuKey)
+  document.addEventListener('pointerdown', (event) => {
+    if (ui.posterMenu.hidden) return
+    const target = event.target
+    if (target instanceof Node && (ui.posterMenu.contains(target) || ui.exportPosterBtn.contains(target))) {
+      return
+    }
+    closePosterMenu()
+  })
+  ui.exportPdfBtn.addEventListener('click', () => {
+    void exportPdfNow()
   })
   ui.exportEdlBtn.addEventListener('click', () => {
     void exportEdlNow()
+  })
+  ui.compareOpenBtn.addEventListener('click', () => {
+    void openCompare()
+  })
+  ui.compareClose.addEventListener('click', closeCompare)
+  ui.compareScrim.addEventListener('click', closeCompare)
+  ui.compare.addEventListener('change', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLSelectElement) || !target.dataset.side) return
+    const side = target.dataset.side === 'left' ? 'left' : 'right'
+    state.compareDates = { ...state.compareDates, [side]: target.value }
+    void renderCompare()
+  })
+  ui.compare.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const strip = target.closest<HTMLElement>('.compare__strip')
+    if (!strip || strip.hasAttribute('disabled')) return
+    const date = strip.dataset.date
+    if (!date) return
+    closeCompare()
+    void selectDay(date)
+  })
+  ui.calendarOpenBtn.addEventListener('click', () => {
+    void openCalendar()
+  })
+  ui.calendarClose.addEventListener('click', closeCalendar)
+  ui.calendarScrim.addEventListener('click', closeCalendar)
+  ui.calendarGrid.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const cell = target.closest<HTMLElement>('[data-date]')
+    const date = cell?.dataset.date
+    if (!date) return
+    closeCalendar()
+    void selectDay(date)
   })
   ui.note.addEventListener('input', onNoteInput)
   ui.projectForm.addEventListener('submit', (event) => {
@@ -2561,7 +3048,13 @@ const date = today
     weekThisDays: [],
     weekLastDays: [],
     weekFilm: null,
-    weekLoading: false
+    weekLoading: false,
+    compareOpen: false,
+    compareDates: { left: '', right: '' },
+    compareCache: new Map(),
+    calendarOpen: false,
+    calendarDays: new Map(),
+    calendarLoading: false
   }
   state.playhead = initialPlayhead()
 
@@ -2569,6 +3062,7 @@ const date = today
   renderSettingsStatic()
   renderSettings()
   renderLive()
+  buildPosterMenu()
   setSpeed(state.speed)
   measure()
   renderDay()

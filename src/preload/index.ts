@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { IPC, type DayfilmApi } from '../shared/ipc'
+import { IPC, type DayfilmApi, type ProjectionBridge } from '../shared/ipc'
 import type { LiveState } from '../shared/types'
-import { HUD_OPEN_CHANNEL } from '../main/ipc'
+import { HUD_OPEN_CHANNEL, PROJECTION_TOGGLE_CHANNEL } from '../main/ipc'
 
 const api: DayfilmApi = {
   getDay: (date) => ipcRenderer.invoke(IPC.getDay, date),
@@ -15,6 +15,7 @@ const api: DayfilmApi = {
   setNote: (date, text) => ipcRenderer.invoke(IPC.setNote, date, text),
   saveImage: (defaultName, pngBase64) => ipcRenderer.invoke(IPC.saveImage, defaultName, pngBase64),
   exportEdl: (date) => ipcRenderer.invoke(IPC.exportEdl, date),
+  exportPdf: (date) => ipcRenderer.invoke(IPC.exportPdf, date),
   setHud: (visible) => ipcRenderer.invoke(IPC.setHud, visible),
   quit: () => ipcRenderer.invoke(IPC.quit),
   onTick: (cb) => {
@@ -37,3 +38,15 @@ export interface HudBridge {
 contextBridge.exposeInMainWorld('dayfilmHud', {
   open: () => ipcRenderer.send(HUD_OPEN_CHANNEL)
 } satisfies HudBridge)
+
+/**
+ * 放映切换通知（主进程 → 渲染进程，由全局快捷键触发）。
+ * 契约里没有对应方法，所以单独暴露一个订阅入口；返回取消订阅函数。
+ */
+contextBridge.exposeInMainWorld('dayfilmProjection', {
+  onToggle: (cb) => {
+    const handler = (): void => cb()
+    ipcRenderer.on(PROJECTION_TOGGLE_CHANNEL, handler)
+    return () => ipcRenderer.removeListener(PROJECTION_TOGGLE_CHANNEL, handler)
+  }
+} satisfies ProjectionBridge)

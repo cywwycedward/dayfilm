@@ -28,6 +28,8 @@ export interface DayfilmSource {
   saveImage(defaultName: string, pngBase64: string): Promise<string>
   /** 导出 CMX3600 EDL；返回落盘路径或说明，空串表示取消。 */
   exportEdl(date: string): Promise<string>
+  /** 导出剧本 PDF；返回落盘路径，空串表示取消。 */
+  exportPdf(date: string): Promise<{ path: string }>
   /** 显隐导演 HUD；返回切换后的状态。 */
   setHud(visible: boolean): Promise<boolean>
   /** 真正退出应用。 */
@@ -60,6 +62,7 @@ function liveSource(api: DayfilmApi): DayfilmSource {
     saveImage: async (defaultName, pngBase64) =>
       (await (exposed.saveImage?.(defaultName, pngBase64) ?? missing('saveImage'))).path,
     exportEdl: async (date) => (await (exposed.exportEdl?.(date) ?? missing('exportEdl'))).path,
+    exportPdf: (date) => exposed.exportPdf?.(date) ?? missing('exportPdf'),
     setHud: async (visible) => (await (exposed.setHud?.(visible) ?? missing('setHud'))).visible,
     quit: () => exposed.quit?.() ?? missing('quit'),
     onTick: (cb) => api.onTick(cb)
@@ -207,6 +210,8 @@ function mockSource(): DayfilmSource {
       window.setTimeout(() => URL.revokeObjectURL(url), 1000)
       return `${name}（演示环境：浏览器下载）`
     },
+    // 演示环境不生成 PDF；界面据此提示“演示环境不支持导出 PDF”
+    exportPdf: async () => ({ path: '' }),
     setHud: async (visible) => {
       if (readonly) throw new Error('演示环境：设置只读，写入被拒绝')
       settings = clone({ ...settings, hud: { ...settings.hud, visible } })
