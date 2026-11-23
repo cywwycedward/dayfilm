@@ -30,6 +30,8 @@ export interface Scene {
   kind: SceneKind
   /** 用户手动标记；未标记表示正片 */
   mark?: SceneMark
+  /** 标记来源：手动点选，或按"自动把短片算花絮"的规则 */
+  markSource?: 'manual' | 'auto'
 }
 
 export interface TopApp {

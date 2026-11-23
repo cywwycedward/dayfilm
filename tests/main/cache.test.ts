@@ -118,7 +118,7 @@ describe('标记叠加', () => {
   it('缓存汇总与带标记的全量计算一致', () => {
     const marks = { [String(T0)]: 'extra' as const }
     const cache = new DayCache({ load: () => samples, marks: () => marks })
-    expect(cache.rollup(date, T0 + 8000)).toEqual(buildDayRollup(samples, date, T0 + 8000, marks))
+    expect(cache.rollup(date, T0 + 8000)).toEqual(buildDayRollup(samples, date, T0 + 8000, { marks }))
   })
 
   it('标记变了，下一次 rollup 就是新结果', () => {
@@ -137,5 +137,31 @@ describe('标记叠加', () => {
     const rollup = cache.rollup(date, T0 + 8000)
     expect(rollup.extraMs).toBe(0)
     expect(rollup.featureMs).toBe(rollup.activeMs)
+  })
+})
+
+describe('自动花絮规则叠加', () => {
+  const date = '2026-11-22'
+  // 两个镜头：2000–2000ms（两个采样，共 4s）与 Slack 4s
+  const samples = [sample(T0), sample(T0 + 2000), sample(T0 + 4000, 'Slack', 'inbox'), sample(T0 + 6000, 'Slack', 'inbox')]
+
+  it('缓存与全量计算走同一套自动规则', () => {
+    const cache = new DayCache({ load: () => samples, autoExtraUnderSec: () => 10 })
+    expect(cache.rollup(date, T0 + 8000)).toEqual(
+      buildDayRollup(samples, date, T0 + 8000, { autoExtraUnderSec: 10 })
+    )
+    const rollup = cache.rollup(date, T0 + 8000)
+    expect(rollup.scenes.every((scene) => scene.markSource === 'auto')).toBe(true)
+    expect(rollup.featureMs).toBe(0)
+    expect(rollup.extraMs).toBe(rollup.activeMs)
+  })
+
+  it('阈值改了，下一次 rollup 就是新结果', () => {
+    let threshold = 0
+    const cache = new DayCache({ load: () => samples, autoExtraUnderSec: () => threshold })
+    expect(cache.rollup(date, T0 + 8000).extraMs).toBe(0)
+
+    threshold = 10
+    expect(cache.rollup(date, T0 + 8000).extraMs).toBe(8000)
   })
 })

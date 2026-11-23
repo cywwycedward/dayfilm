@@ -118,17 +118,17 @@ function mockSource(): DayfilmSource {
     ]
   }
   const notes = new Map<string, string>()
-  // 导演剪辑标记：`${date}|${start}` → feature / extra
-  const marks = new Map<string, SceneMark>()
+  // 导演剪辑标记：`${date}|${start}` → { mark, source }；source 由 mock 按阈值推断（主进程侧同理）
+  const marks = new Map<string, { mark: SceneMark; source: 'manual' | 'auto' }>()
 
   const applyMarks = (date: string, base: DayRollup): DayRollup => {
     if (marks.size === 0) return base
     let touched = false
     const scenes = base.scenes.map((scene) => {
-      const mark = marks.get(`${date}|${scene.start}`)
-      if (mark === undefined || scene.mark === mark) return scene
+      const entry = marks.get(`${date}|${scene.start}`)
+      if (entry === undefined) return scene
       touched = true
-      return { ...scene, mark }
+      return { ...scene, mark: entry.mark, markSource: entry.source }
     })
     if (!touched) return base
     const featureMs = scenes
@@ -257,8 +257,14 @@ function mockSource(): DayfilmSource {
     },
     setMark: async (date, startMs, mark) => {
       const key = `${date}|${startMs}`
-      if (mark === null) marks.delete(key)
-      else marks.set(key, mark)
+      if (mark === null) {
+        marks.delete(key)
+      } else {
+        const scene = dayFor(date).scenes.find((item) => item.start === startMs)
+        const threshold = settings.autoExtraUnderSec
+        const auto = mark === 'extra' && threshold > 0 && scene !== undefined && scene.seconds < threshold
+        marks.set(key, { mark, source: auto ? 'auto' : 'manual' })
+      }
       return dayFor(date)
     },
     onTick: (cb) => {

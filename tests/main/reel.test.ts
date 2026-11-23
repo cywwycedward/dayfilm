@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyMarks, buildDayRollup, renderScreenplay, searchScenes } from '../../src/main/reel'
+import { applyMarks, buildDayRollup, isAutoExtra, renderScreenplay, searchScenes } from '../../src/main/reel'
 import type { DayRollup, Sample } from '../../src/shared/types'
 
 const STEP = 2000
@@ -293,7 +293,7 @@ describe('renderScreenplay', () => {
     const builder = new Day().shot('Code', 'dayfilm', 600)
     const base = builder.rollup()
     const extraStart = String(base.scenes[0].start)
-    const marked = buildDayRollup(builder.samples, DATE, builder.now, { [extraStart]: 'extra' })
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { marks: { [extraStart]: 'extra' } })
     expect(renderScreenplay(marked)).toContain('正片 0 分钟 · 花絮 10 分钟')
     expect(renderScreenplay(base)).toContain('正片 10 分钟 · 花絮 0 分钟')
   })
@@ -304,9 +304,10 @@ describe('导演剪辑版标记', () => {
     const builder = new Day().shot('Code', 'dayfilm', 10).shot('Slack', '#general', 20)
     const plain = builder.rollup()
     const extraStart = String(plain.scenes[1].start)
-    const marked = buildDayRollup(builder.samples, DATE, builder.now, { [extraStart]: 'extra' })
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { marks: { [extraStart]: 'extra' } })
 
     expect(marked.scenes[1].mark).toBe('extra')
+    expect(marked.scenes[1].markSource).toBe('manual')
     expect(marked.scenes[0].mark).toBeUndefined()
     expect(marked.extraMs).toBe(plain.scenes[1].end - plain.scenes[1].start)
     expect(marked.featureMs).toBe(plain.scenes[0].end - plain.scenes[0].start)
@@ -326,15 +327,16 @@ describe('导演剪辑版标记', () => {
   it('显式标成正片也算正片', () => {
     const builder = new Day().shot('Code', 'dayfilm', 10)
     const start = String(builder.rollup().scenes[0].start)
-    const marked = buildDayRollup(builder.samples, DATE, builder.now, { [start]: 'feature' })
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { marks: { [start]: 'feature' } })
     expect(marked.scenes[0].mark).toBe('feature')
+    expect(marked.scenes[0].markSource).toBe('manual')
     expect(marked.featureMs).toBe(marked.activeMs)
     expect(marked.extraMs).toBe(0)
   })
 
   it('对不上任何镜头的旧标记被忽略', () => {
     const builder = new Day().shot('Code', 'dayfilm', 10)
-    const marked = buildDayRollup(builder.samples, DATE, builder.now, { '999': 'extra' })
+    const marked = buildDayRollup(builder.samples, DATE, builder.now, { marks: { '999': 'extra' } })
     expect(marked.extraMs).toBe(0)
     expect(marked.featureMs).toBe(marked.activeMs)
   })
@@ -347,5 +349,76 @@ describe('导演剪辑版标记', () => {
     expect(marked.idleMs).toBe(rollup.idleMs)
     expect(marked.scenes[1]).toBe(rollup.scenes[1])
     expect(marked.extraMs).toBe(rollup.scenes[0].end - rollup.scenes[0].start)
+  })
+})
+
+describe('自动花絮规则', () => {
+  it('isAutoExtra：严格小于阈值，等于不算', () => {
+    expect(isAutoExtra(2800, 3)).toBe(true)
+    // 3 秒正好：不算（镜头本来就以 3 秒起算）
+    expect(isAutoExtra(3000, 3)).toBe(false)
+    expect(isAutoExtra(3100, 3)).toBe(false)
+    expect(isAutoExtra(9999, 10)).toBe(true)
+    expect(isAutoExtra(10_000, 10)).toBe(false)
+  })
+
+  it('阈值 0 / 负数 / 非法值都表示关闭', () => {
+    expect(isAutoExtra(1000, 0)).toBe(false)
+    expect(isAutoExtra(1000, -5)).toBe(false)
+    expect(isAutoExtra(1000, Number.NaN)).toBe(false)
+  })
+
+  it('buildDayRollup 带上阈值：短镜头变自动花絮，长镜头仍是正片', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 8).shot('Slack', '#general', 20)
+    const rollup = buildDayRollup(builder.samples, DATE, builder.now, { autoExtraUnderSec: 10 })
+    expect(rollup.scenes[0].mark).toBe('extra')
+    expect(rollup.scenes[0].markSource).toBe('auto')
+    expect(rollup.scenes[1].mark).toBeUndefined()
+    expect(rollup.extraMs).toBe(8000)
+    expect(rollup.featureMs).toBe(20_000)
+    expect(rollup.featureMs + rollup.extraMs).toBe(rollup.activeMs)
+  })
+
+  it('正好等于阈值不算自动花絮', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 10)
+    const rollup = buildDayRollup(builder.samples, DATE, builder.now, { autoExtraUnderSec: 10 })
+    expect(rollup.scenes[0].mark).toBeUndefined()
+    expect(rollup.extraMs).toBe(0)
+    expect(rollup.featureMs).toBe(rollup.activeMs)
+  })
+
+  it('手动标记优先于自动规则', () => {
+    const short = new Day().shot('Code', 'dayfilm', 8)
+    const shortStart = String(short.rollup().scenes[0].start)
+    const asFeature = buildDayRollup(short.samples, DATE, short.now, {
+      marks: { [shortStart]: 'feature' },
+      autoExtraUnderSec: 10
+    })
+    expect(asFeature.scenes[0].mark).toBe('feature')
+    expect(asFeature.scenes[0].markSource).toBe('manual')
+    expect(asFeature.extraMs).toBe(0)
+
+    // 手动标花絮的长镜头，不会因为规则关闭而变回正片
+    const long = new Day().shot('Code', 'dayfilm', 20)
+    const longStart = String(long.rollup().scenes[0].start)
+    const manualExtra = buildDayRollup(long.samples, DATE, long.now, { marks: { [longStart]: 'extra' } })
+    expect(manualExtra.scenes[0].mark).toBe('extra')
+    expect(manualExtra.scenes[0].markSource).toBe('manual')
+    expect(manualExtra.extraMs).toBe(20_000)
+  })
+
+  it('关闭时行为与只传 marks 一致', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 8)
+    const rollup = buildDayRollup(builder.samples, DATE, builder.now, { autoExtraUnderSec: 0 })
+    expect(rollup.scenes[0].mark).toBeUndefined()
+    expect(rollup.featureMs).toBe(rollup.activeMs)
+    expect(rollup.extraMs).toBe(0)
+  })
+
+  it('中场休息不算自动花絮', () => {
+    const builder = new Day().shot('Code', 'dayfilm', 8).idle(120)
+    const rollup = buildDayRollup(builder.samples, DATE, builder.now, { autoExtraUnderSec: 30 })
+    expect(rollup.scenes.filter((scene) => scene.kind === 'intermission')).toHaveLength(1)
+    expect(rollup.scenes.some((scene) => scene.kind === 'intermission' && scene.mark !== undefined)).toBe(false)
   })
 })

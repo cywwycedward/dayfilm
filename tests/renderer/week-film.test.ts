@@ -7,6 +7,7 @@ import {
   mainLineOf,
   mondayOf,
   weekDates,
+  weekEntries,
   weekMetrics,
   weekRangeLabel,
   type WeekDay
@@ -408,5 +409,62 @@ describe('故事线矩阵规则', () => {
     expect(unmatched.columns[0].protagonist).toBeNull()
     expect(unmatched.columns[0].noRecord).toBe(false)
     expect(unmatched.rows).toEqual([])
+  })
+})
+
+
+// v2.6：周电影只算正片（花絮不计入主线/最长/剪辑数），并带花絮时长
+function markedRollup(date: string, scenes: Scene[]): DayRollup {
+  const base = rollup(date, scenes, Math.max(0, scenes.length - 1))
+  const ms = (list: Scene[]): number => list.reduce((sum, item) => sum + (item.end - item.start), 0)
+  return {
+    ...base,
+    featureMs: ms(scenes.filter((item) => item.mark !== 'extra')),
+    extraMs: ms(scenes.filter((item) => item.mark === 'extra'))
+  }
+}
+
+function marked(date: string, hour: number, minutes: number, exe: string, mark?: Scene['mark'], markSource?: Scene['markSource']): WeekDay {
+  const base = scene(`${date}-${hour}`, date, hour, minutes, exe, 'dayfilm')
+  return { date, day: markedRollup(date, [{ ...base, mark, markSource }]) }
+}
+
+describe('周电影正片口径（v2.6）', () => {
+  test('花絮不进周统计，只算正片时长与剪辑数', () => {
+    const scenes: Scene[] = [
+      { ...scene('a', '2025-01-13', 9, 60, 'Code'), mark: 'extra' },
+      scene('b', '2025-01-13', 11, 30, 'Code'),
+      scene('c', '2025-01-13', 12, 20, 'chrome')
+    ]
+    const days = [{ date: '2025-01-13', day: markedRollup('2025-01-13', scenes) }]
+    const metrics = weekMetrics(days, '2025-01-19')
+    expect(metrics.activeMs).toBe(50 * MINUTE)
+    expect(metrics.shots).toBe(2)
+    expect(metrics.cuts).toBe(1)
+    expect(metrics.longestSeconds).toBe(30 * 60)
+    expect(weekEntries(days, '2025-01-19').map((entry) => entry.scene.id)).toEqual(['b', 'c'])
+  })
+
+  test('主线与每幕卡片忽略花絮，但带花絮时长', () => {
+    const days = [
+      marked('2025-01-13', 9, 30, 'Code', 'extra'),
+      marked('2025-01-13', 11, 60, 'chrome')
+    ]
+    const used = days[0]
+    expect(mainLineOf(used.day, PROJECTS)).toBeNull()
+    const film = buildWeekFilm({ days, projects: PROJECTS, today: '2025-01-19' })
+    expect(film.acts[0].extraMs).toBe(30 * MINUTE)
+    expect(film.acts[1].extraMs).toBe(0)
+    expect(film.acts[1].mainLine).toBe('Dayfilm')
+    const withExtra = buildWeekFilm({ days: [used], projects: PROJECTS, today: '2025-01-19' })
+    expect(withExtra.acts[0].extraMs).toBe(30 * MINUTE)
+    expect(withExtra.acts[0].mainLine).toBeNull()
+  })
+
+  test('周评语在本周花絮占比 > 10% 时补一句', () => {
+    const thisWeek = [marked('2025-01-13', 9, 60, 'Code'), marked('2025-01-13', 11, 30, 'Code', 'extra', 'auto')]
+    const lastWeek = [marked('2025-01-06', 9, 90, 'Code')]
+    const verdict = buildWeekVerdict(thisWeek, lastWeek, '2025-01-19')
+    expect(verdict.sentence).toContain('其中花絮占')
   })
 })

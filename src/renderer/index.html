@@ -347,7 +347,24 @@
               <label class="switch"><input type="checkbox" id="settingAutoStart" /><span>开机自启</span></label>
               <label class="switch"><input type="checkbox" id="settingPaused" /><span>暂停采样</span></label>
               <label class="switch"><input type="checkbox" id="settingHud" /><span>导演 HUD</span></label>
-              <p class="hint">暂停与托盘菜单里的“暂停采样”是同一个开关；导演 HUD 是右上角的置顶小窗。</p>
+              <div class="sound-row">
+                <span class="field__label">自动花絮</span>
+                <div id="settingAutoExtra"></div>
+              </div>
+              <p class="hint">暂停与托盘菜单里的“暂停采样”是同一个开关；自动花絮会把短于阈值的镜头默认计为花絮。</p>
+            </section>
+
+            <section class="fieldset">
+              <h3>放映音效</h3>
+              <div class="sound-modes" role="group" aria-label="放映音效模式">
+                <button class="sound-mode is-active" id="soundModeProjector" type="button" aria-pressed="true">放映机 + 剪辑</button>
+                <button class="sound-mode" id="soundModeCuts" type="button" aria-pressed="false">仅剪辑</button>
+              </div>
+              <div class="sound-volume">
+                <span class="field__label">音量</span>
+                <input id="soundVolume" type="range" min="0" max="100" step="5" value="35" aria-label="放映音效音量" />
+                <span class="sound-volume__value" id="soundVolumeValue">35</span>
+              </div>
             </section>
 
             <section class="fieldset">
@@ -378,6 +395,10 @@
       <div class="menu" id="moreMenu" role="menu" aria-label="更多" hidden>
         <button class="menu__item" role="menuitem" type="button" id="compareOpen">对比两天</button>
         <button class="menu__item" role="menuitem" type="button" id="calendarOpen">片场日历</button>
+        <p class="menu__label">导演剪辑版</p>
+        <button class="menu__item" role="menuitem" type="button" id="markUnder10">把今天 10 秒以下的镜头标为花絮</button>
+        <button class="menu__item" role="menuitem" type="button" id="markAuto">按设置自动标记</button>
+        <button class="menu__item" role="menuitem" type="button" id="markClear">清除今天的全部标记</button>
       </div>
 
       <div class="overlay" id="compare" hidden>

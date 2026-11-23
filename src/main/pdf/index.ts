@@ -46,8 +46,8 @@ function sceneRows(scenes: readonly Scene[]): string[][] {
   return scenes
     .filter((scene) => scene.kind === 'shot')
     .map((scene) => [
-      // 未标记按正片算（与 featureMs 的口径一致），不再留空
-      scene.mark === 'extra' ? '花絮' : '正片',
+      // 未标记按正片算（与 featureMs 的口径一致），不再留空；自动花絮要能看出来
+      scene.mark === 'extra' ? (scene.markSource === 'auto' ? '花絮（自动）' : '花絮') : '正片',
       `${clock(scene.start)}–${clock(scene.end)}`,
       scene.exe,
       scene.title.trim().length > 0 ? scene.title : '未命名窗口',
@@ -57,7 +57,7 @@ function sceneRows(scenes: readonly Scene[]): string[][] {
 
 function tableRow(cells: readonly string[]): string {
   const [mark, range, exe, title, length] = cells.map(escapeHtml)
-  const markClass = mark === '花絮' ? 'num mark-extra' : 'num mark-feature'
+  const markClass = mark.startsWith('花絮') ? 'num mark-extra' : 'num mark-feature'
   return `<tr><td class="${markClass}">${mark}</td><td class="num">${range}</td><td>${exe}</td><td>${title}</td><td class="num">${length}</td></tr>`
 }
 

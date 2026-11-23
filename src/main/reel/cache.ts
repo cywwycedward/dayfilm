@@ -9,6 +9,8 @@ export interface DayCacheOptions {
   keep?(sample: Sample): boolean
   /** 某天的导演剪辑版标记（镜头开始时刻 → 标记）；标记是读取时的叠加层，不进增量状态 */
   marks?(date: string): Record<string, SceneMark>
+  /** 自动花絮阈值（秒，0 = 关闭）；同样是读取时叠加的规则 */
+  autoExtraUnderSec?(): number
   /** 最多驻留多少天，默认 8（检索要跨 7 天） */
   limit?: number
 }
@@ -58,8 +60,12 @@ export class DayCache {
   }
 
   rollup(date: string, now: number): DayRollup {
-    // 标记是读取时叠加的：标记变了不需要重建增量状态，重算一次 rollup 就是新的
-    return applyMarks(this.entry(date).aggregator.rollup(now), this.options.marks?.(date))
+    // 标记与自动规则都是读取时叠加的：它们变了不需要重建增量状态，重算一次 rollup 就是新的
+    return applyMarks(
+      this.entry(date).aggregator.rollup(now),
+      this.options.marks?.(date),
+      this.options.autoExtraUnderSec?.() ?? 0
+    )
   }
 
   /** 丢弃缓存；不传日期表示清空。 */

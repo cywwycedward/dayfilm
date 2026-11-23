@@ -1,6 +1,7 @@
 /** 界面主体：构建骨架、维护状态、把状态写进 DOM。数据只来自 DayfilmSource。 */
 import type { DayRollup, LiveState, Scene, SceneMark } from '../../shared/types'
 import {
+  AUTO_EXTRA_OPTIONS,
   BUILTIN_REDACT_TERMS,
   DEFAULT_SETTINGS,
   RETENTION_OPTIONS,
@@ -209,6 +210,14 @@ interface Ui {
   termForm: HTMLFormElement
   termInput: HTMLInputElement
   autoStart: HTMLInputElement
+  autoExtra: HTMLElement
+  soundModeProjector: HTMLButtonElement
+  soundModeCuts: HTMLButtonElement
+  soundVolume: HTMLInputElement
+  soundVolumeValue: HTMLElement
+  markUnder10: HTMLButtonElement
+  markAuto: HTMLButtonElement
+  markClear: HTMLButtonElement
   pausedToggle: HTMLInputElement
   hudToggle: HTMLInputElement
   quitBtn: HTMLButtonElement
@@ -296,6 +305,7 @@ let compareResult: CompareResult | null = null
 let compareRenderToken = 0
 let dateSelect: SelectHandle | null = null
 let retentionSelect: SelectHandle | null = null
+let autoExtraSelect: SelectHandle | null = null
 let windowMaximized = false
 
 /** 主进程并行改无边框窗口；未就绪时全部可选调用。 */
@@ -421,6 +431,14 @@ function collect(root: HTMLElement): Ui {
     termForm: pick<HTMLFormElement>('termForm'),
     termInput: pick<HTMLInputElement>('termInput'),
     autoStart: pick<HTMLInputElement>('settingAutoStart'),
+    autoExtra: pick<HTMLElement>('settingAutoExtra'),
+    soundModeProjector: pick<HTMLButtonElement>('soundModeProjector'),
+    soundModeCuts: pick<HTMLButtonElement>('soundModeCuts'),
+    soundVolume: pick<HTMLInputElement>('soundVolume'),
+    soundVolumeValue: pick<HTMLElement>('soundVolumeValue'),
+    markUnder10: pick<HTMLButtonElement>('markUnder10'),
+    markAuto: pick<HTMLButtonElement>('markAuto'),
+    markClear: pick<HTMLButtonElement>('markClear'),
     pausedToggle: pick<HTMLInputElement>('settingPaused'),
     hudToggle: pick<HTMLInputElement>('settingHud'),
     quitBtn: pick<HTMLButtonElement>('quitBtn'),
@@ -787,8 +805,17 @@ function renderStats(): void {
       )
       return left
     })(),
-    node('span', 'stats__marks-extra', `花絮 ${fmtMinutes(day.extraMs)}`)
+    (() => {
+      const autoMs = day.scenes
+        .filter((scene) => scene.mark === 'extra' && scene.markSource === 'auto')
+        .reduce((sum, scene) => sum + scene.seconds * 1000, 0)
+      const extra = autoMs > 0
+        ? `花絮 ${fmtMinutes(day.extraMs)}（含自动 ${fmtMinutes(autoMs)}）`
+        : `花絮 ${fmtMinutes(day.extraMs)}`
+      return node('span', 'stats__marks-extra', extra)
+    })()
   )
+  renderBulkState()
   renderProjectLine(day)
 }
 
@@ -828,7 +855,8 @@ function buildRow(
   const extra = scene.mark === 'extra'
   if (extra) {
     button.classList.add('is-extra')
-    titleCell.append(node('span', 'shot__mark', '花絮'))
+    const auto = scene.markSource === 'auto'
+    titleCell.append(node('span', auto ? 'shot__mark is-auto' : 'shot__mark', auto ? '花絮（自动）' : '花絮'))
   }
   button.append(
     node('span', 'shot__clock', `${stamp}${fmtClock(scene.start)}`),
@@ -1328,6 +1356,8 @@ function startProjection(): void {
   ui.projection.hidden = false
   ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
   ui.soundToggle.setAttribute('aria-pressed', String(projection.sound))
+  projectorAudio.setVolume(state.settings.sound.volume)
+  projectorAudio.setMode(state.settings.sound.mode)
   projectorAudio.setEnabled(projection.sound)
   if (projection.sound) startAudioMeter()
   else stopAudioMeter()
@@ -1610,6 +1640,15 @@ function renderSettingsStatic(): void {
 function renderSettings(): void {
   const settings = state.settings
   retentionSelect?.setValue(String(settings.retentionDays))
+  autoExtraSelect?.setValue(String(settings.autoExtraUnderSec))
+  const mode = settings.sound?.mode ?? 'projector'
+  ui.soundModeProjector.classList.toggle('is-active', mode === 'projector')
+  ui.soundModeProjector.setAttribute('aria-pressed', String(mode === 'projector'))
+  ui.soundModeCuts.classList.toggle('is-active', mode === 'cuts')
+  ui.soundModeCuts.setAttribute('aria-pressed', String(mode === 'cuts'))
+  const volume = Math.round((settings.sound?.volume ?? 0.35) * 100)
+  if (ui.soundVolume.value !== String(volume)) ui.soundVolume.value = String(volume)
+  ui.soundVolumeValue.textContent = String(volume)
   ui.autoStart.checked = settings.autoStart
   ui.pausedToggle.checked = settings.paused
   ui.hudToggle.checked = settings.hud.visible
@@ -2021,6 +2060,88 @@ function onMenuKey(event: KeyboardEvent): void {
   const index = items.indexOf(document.activeElement as HTMLElement)
   const step = event.key === 'ArrowDown' ? 1 : -1
   items[(index + step + items.length) % items.length]?.focus()
+}
+
+/* 放映音效（v2.6）----------------------------------------------------*/
+
+/** 调试音量/模式：立即同步到 WebAudio，再落盘设置。 */
+async function applySound(patch: Partial<Settings['sound']>): Promise<void> {
+  const next = { ...state.settings.sound, ...patch }
+  projectorAudio.setVolume(next.volume)
+  projectorAudio.setMode(next.mode)
+  await applySettings({ sound: next })
+}
+
+/* 批量标记（v2.6）----------------------------------------------------*/
+
+const BULK_LIMIT = 200
+let clearArmedAt = 0
+
+/** 把符合条件的镜头串行标成花絮/清除；只动已存在的镜头，不改设置。 */
+async function bulkMark(kind: 'under10' | 'auto' | 'clear'): Promise<void> {
+  const shots = state.day.scenes.filter((scene) => scene.kind === 'shot')
+  if (shots.length === 0) {
+    toast('当天没有镜头，无法批量标记')
+    return
+  }
+  let targets: Scene[] = []
+  let mark: SceneMark | null = 'extra'
+  if (kind === 'clear') {
+    const marked = state.day.scenes.filter((scene) => scene.mark !== undefined)
+    if (marked.length === 0) {
+      toast('今天还没有标记')
+      return
+    }
+    if (Date.now() - clearArmedAt > 4000) {
+      clearArmedAt = Date.now()
+      toast('再点一次「清除今天的全部标记」确认（4 秒内有效）')
+      return
+    }
+    clearArmedAt = 0
+    targets = marked.slice(0, BULK_LIMIT)
+    mark = null
+  } else {
+    const threshold = kind === 'under10' ? 10 : state.settings.autoExtraUnderSec
+    if (threshold <= 0) {
+      toast('自动花絮阈值为 0，先到设置里选一个阈值')
+      return
+    }
+    targets = shots.filter((scene) => scene.seconds < threshold && scene.mark !== 'extra').slice(0, BULK_LIMIT)
+    if (targets.length === 0) {
+      toast(`没有需要标记的镜头（阈值 ${threshold} 秒）`)
+      return
+    }
+  }
+
+  let done = 0
+  let latest: DayRollup | null = null
+  for (const scene of targets) {
+    try {
+      latest = await state.source.setMark(state.date, scene.start, mark)
+      done += 1
+    } catch (error) {
+      toast(`标记失败：${messageOf(error)}`)
+      return
+    }
+  }
+  if (latest !== null) {
+    state.day = latest
+    if (state.live !== null && state.live.day.date === state.date) {
+      state.live = { ...state.live, day: latest }
+    }
+    listSignature = ''
+    windowSignature = ''
+    renderDay()
+  }
+  toast(kind === 'clear' ? `已清除 ${done} 条标记` : `已标记 ${done} 条`)
+}
+
+/** 当天没有镜头时禁用批量菜单项。 */
+function renderBulkState(): void {
+  const empty = !state.day.scenes.some((scene) => scene.kind === 'shot')
+  ui.markUnder10.disabled = empty
+  ui.markAuto.disabled = empty
+  ui.markClear.disabled = empty
 }
 
 /* 双日对比（R51）--------------------------------------------------------*/
@@ -2539,6 +2660,9 @@ const head = node('div', 'arc__head')
         meta.append(node('span', badge.kind === 'switch' ? 'tag tag--switch' : 'tag', badge.text))
       }
       card.append(meta)
+      if (act.extraMs > 0) {
+        card.append(node('p', 'arc__extra', `花絮 ${fmtMinutes(act.extraMs)}`))
+      }
     }
     return card
   })
@@ -2822,7 +2946,9 @@ function bindEvents(): void {
   ui.exitProjection.addEventListener('click', stopProjection)
   ui.soundToggle.addEventListener('click', () => {
     projection = setProjectionSound(projection, !projection.sound)
-    projectorAudio.setEnabled(projection.sound)
+    projectorAudio.setVolume(state.settings.sound.volume)
+  projectorAudio.setMode(state.settings.sound.mode)
+  projectorAudio.setEnabled(projection.sound)
     if (projection.sound) startAudioMeter()
     else stopAudioMeter()
     ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
@@ -2889,6 +3015,30 @@ function bindEvents(): void {
   ui.calendarOpenBtn.addEventListener('click', () => {
     closeMenus()
     void openCalendar()
+  })
+  // v2.6 批量标记（··· 菜单）
+  ui.markUnder10.addEventListener('click', () => {
+    closeMenus()
+    void bulkMark('under10')
+  })
+  ui.markAuto.addEventListener('click', () => {
+    closeMenus()
+    void bulkMark('auto')
+  })
+  ui.markClear.addEventListener('click', () => {
+    closeMenus()
+    void bulkMark('clear')
+  })
+  // v2.6 放映音效
+  ui.soundModeProjector.addEventListener('click', () => {
+    void applySound({ mode: 'projector' })
+  })
+  ui.soundModeCuts.addEventListener('click', () => {
+    void applySound({ mode: 'cuts' })
+  })
+  ui.soundVolume.addEventListener('input', () => {
+    ui.soundVolumeValue.textContent = ui.soundVolume.value
+    void applySound({ volume: Number(ui.soundVolume.value) / 100 })
   })
   ui.calendarClose.addEventListener('click', closeCalendar)
   ui.calendarScrim.addEventListener('click', closeCalendar)
@@ -3038,6 +3188,15 @@ export async function boot(): Promise<void> {
     }
   })
   ui.retention.replaceChildren(retentionSelect.element)
+  autoExtraSelect = createSelect({
+    label: '自动花絮',
+    options: AUTO_EXTRA_OPTIONS.map((option) => ({ value: String(option.value), label: option.label })),
+    value: String(state.settings.autoExtraUnderSec),
+    onChange: (value) => {
+      void applySettings({ autoExtraUnderSec: Number(value) })
+    }
+  })
+  ui.autoExtra.replaceChildren(autoExtraSelect.element)
   // 最大化状态由主进程推送；桥接缺席时忽略
   windowBridge?.onMaximizeChange?.((maximized) => applyWindowMaximized(maximized))
   renderDates()

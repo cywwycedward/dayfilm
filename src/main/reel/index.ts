@@ -74,32 +74,61 @@ function sceneEnd(run: Run, next: Run | undefined, now: number): number {
   return Math.max(run.firstT, Math.min(run.lastT + SAMPLE_MS, limit))
 }
 
-/** 把标记应用到镜头上并重算正片/花絮时长（未标记按正片算）。 */
-export function applyMarks(rollup: DayRollup, marks: Record<string, SceneMark> | undefined): DayRollup {
-  if (!marks || Object.keys(marks).length === 0) return rollup
+/**
+ * 自动花絮规则：镜头时长短于阈值（**毫秒严格小于**）就算花絮，阈值 <= 0 表示关闭。
+ * 用毫秒而不是 `Scene.seconds`：后者是四舍五入过的，3.4s 会被舍成 3。
+ */
+export function isAutoExtra(ms: number, autoExtraUnderSec: number): boolean {
+  return Number.isFinite(autoExtraUnderSec) && autoExtraUnderSec > 0 && ms < autoExtraUnderSec * 1000
+}
+
+/**
+ * 把标记应用到镜头上并重算正片/花絮时长。
+ * 手动标记优先；没有手动标记且短于自动阈值时算自动花絮（`markSource: 'auto'`）；
+ * 其余（含手动标正片）都计入正片。
+ */
+export function applyMarks(
+  rollup: DayRollup,
+  marks: Record<string, SceneMark> | undefined,
+  autoExtraUnderSec = 0
+): DayRollup {
+  const hasMarks = Boolean(marks && Object.keys(marks).length > 0)
+  const autoOn = Number.isFinite(autoExtraUnderSec) && autoExtraUnderSec > 0
+  if (!hasMarks && !autoOn) return rollup
+
   let featureMs = 0
   let extraMs = 0
-  const scenes = rollup.scenes.map((scene) => {
+  const scenes = rollup.scenes.map((scene): Scene => {
     if (scene.kind === 'intermission') return scene
-    const mark = marks[String(scene.start)]
     const ms = scene.end - scene.start
-    if (mark === 'extra') {
+    const manual = marks?.[String(scene.start)]
+    if (manual === 'extra') {
       extraMs += ms
-      return { ...scene, mark }
+      return { ...scene, mark: 'extra', markSource: 'manual' }
+    }
+    if (manual === 'feature') {
+      featureMs += ms
+      return { ...scene, mark: 'feature', markSource: 'manual' }
+    }
+    if (autoOn && isAutoExtra(ms, autoExtraUnderSec)) {
+      extraMs += ms
+      return { ...scene, mark: 'extra', markSource: 'auto' }
     }
     featureMs += ms
-    return mark === 'feature' ? { ...scene, mark } : scene
+    return scene
   })
   return { ...rollup, scenes, featureMs, extraMs }
 }
 
-/** 采样 → 一天的镜头、汇总与题材。纯函数，同输入同输出；`marks` 为镜头开始时刻 → 标记。 */
-export function buildDayRollup(
-  samples: Sample[],
-  date: string,
-  now: number,
+export interface RollupOptions {
+  /** 手动标记：镜头开始时刻（毫秒字符串）→ 标记 */
   marks?: Record<string, SceneMark>
-): DayRollup {
+  /** 短于这么多秒的镜头自动算花絮；0 表示关闭 */
+  autoExtraUnderSec?: number
+}
+
+/** 采样 → 一天的镜头、汇总与题材。纯函数，同输入同输出。 */
+export function buildDayRollup(samples: Sample[], date: string, now: number, options: RollupOptions = {}): DayRollup {
   const ordered = orderSamples(samples)
   const runs = groupRuns(ordered)
   const kept: Array<{ scene: Scene; ms: number }> = []
@@ -166,7 +195,7 @@ export function buildDayRollup(
     featureMs: activeMs,
     extraMs: 0
   }
-  return applyMarks(base, marks)
+  return applyMarks(base, options.marks, options.autoExtraUnderSec ?? 0)
 }
 
 /** 标题与进程名的子串匹配，不区分大小写；跨日期合并后按开始时间倒序，最多 200 条。 */

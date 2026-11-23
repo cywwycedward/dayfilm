@@ -16,6 +16,14 @@ export interface HudSettings {
   y: number | null
 }
 
+/** 放映音效：模式与音量。 */
+export interface SoundSettings {
+  /** projector = 放映机底噪 + 剪辑咔哒；cuts = 只有剪辑咔哒 */
+  mode: 'projector' | 'cuts'
+  /** 0..1 */
+  volume: number
+}
+
 export interface Settings {
   /** 保留天数；0 表示不自动清理 */
   retentionDays: number
@@ -29,6 +37,10 @@ export interface Settings {
   projects: ProjectRule[]
   /** 导演 HUD */
   hud: HudSettings
+  /** 短于这个秒数的镜头自动算花絮；0 表示关闭 */
+  autoExtraUnderSec: number
+  /** 放映音效 */
+  sound: SoundSettings
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,8 +49,17 @@ export const DEFAULT_SETTINGS: Settings = {
   autoStart: false,
   paused: false,
   projects: [],
-  hud: { visible: true, x: null, y: null }
+  hud: { visible: true, x: null, y: null },
+  autoExtraUnderSec: 0,
+  sound: { mode: 'projector', volume: 0.35 }
 }
+
+export const AUTO_EXTRA_OPTIONS: readonly { value: number; label: string }[] = [
+  { value: 0, label: '不自动标记' },
+  { value: 3, label: '3 秒以下' },
+  { value: 10, label: '10 秒以下' },
+  { value: 30, label: '30 秒以下' }
+] as const
 
 export const RETENTION_OPTIONS: readonly { value: number; label: string }[] = [
   { value: 7, label: '7 天' },

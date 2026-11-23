@@ -213,4 +213,13 @@ describe('renderEdl 花絮（v2.4）', () => {
     expect(renderEdl(day([scene(0, 60_000)]))).not.toContain('NOTE')
     expect(renderEdl(day([]))).not.toContain('NOTE')
   })
+
+  it('自动花絮（markSource: auto）同样不导出', () => {
+    const autoExtra = { ...scene(60_000, 120_000, 'Slack', '#general'), mark: 'extra' as const, markSource: 'auto' as const }
+    const text = renderEdl(day([scene(0, 60_000), autoExtra, scene(120_000, 180_000, 'Chrome')]))
+    const events = text.split('\n').filter((line) => /^\d{3}  /.test(line))
+    expect(events).toHaveLength(2)
+    expect(text).toContain('* NOTE: 1 extra scenes omitted')
+    expect(text).not.toContain('Slack')
+  })
 })

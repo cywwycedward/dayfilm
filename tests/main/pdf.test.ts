@@ -208,4 +208,14 @@ describe('PDF 导演剪辑版（v2.4）', () => {
     const html = buildScriptHtml(day([shot(0, 600_000)]))
     expect(html).toContain('正片 10 分钟 · 花絮 0 分钟')
   })
+
+  it('自动花絮在标记列写「花絮（自动）」', () => {
+    const autoScenes = [{ ...shot(0, 600_000), mark: 'extra' as const, markSource: 'auto' as const }, shot(600_000, 1_200_000)]
+    const html = buildScriptHtml(day(autoScenes))
+    expect(html).toContain('<td class="num mark-extra">花絮（自动）</td>')
+
+    const manual = buildScriptHtml(day([{ ...shot(0, 600_000), mark: 'extra' as const, markSource: 'manual' as const }]))
+    expect(manual).toContain('<td class="num mark-extra">花絮</td>')
+    expect(manual).not.toContain('花絮（自动）')
+  })
 })

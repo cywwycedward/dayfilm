@@ -101,6 +101,8 @@ export interface ActModel {
   longestSeconds: number
   cuts: number
   shots: number
+  /** 当天花絮总时长（含自动），0 时不显示 */
+  extraMs: number
   badges: ActBadge[]
 }
 
@@ -162,15 +164,30 @@ function pickTop(items: readonly { name: string; ms: number }[]): { name: string
   return best
 }
 
+/** 正片镜头：花絮（手动或自动）不计入周主线与统计。 */
+function featureScenes(day: DayRollup): Scene[] {
+  return day.scenes.filter((scene) => scene.kind === 'shot' && scene.mark !== 'extra')
+}
+
+/** 某天正片镜头之间的剪辑数（有花絮时才需要重算）。 */
+function featureCuts(day: DayRollup): number {
+  return Math.max(0, featureScenes(day).length - 1)
+}
+
+function hasExtra(day: DayRollup): boolean {
+  return day.scenes.some((scene) => scene.mark === 'extra')
+}
+
 /** 某天的主线：项目优先；没有项目规则时用进程名；并列按名称字典序。 */
 export function mainLineOf(day: DayRollup | null, projects: readonly ProjectRule[]): WeekLine | null {
   if (!day) return null
+  const scenes = day.scenes.filter((scene) => scene.mark !== 'extra')
   if (projects.length > 0) {
-    const top = pickTop(totalByProject(day.scenes, projects).map((item) => ({ name: item.name, ms: item.ms })))
+    const top = pickTop(totalByProject(scenes, projects).map((item) => ({ name: item.name, ms: item.ms })))
     return top ? { name: top.name, ms: top.ms, kind: 'project' } : null
   }
   const totals = new Map<string, number>()
-  for (const scene of day.scenes) {
+  for (const scene of scenes) {
     if (scene.kind !== 'shot') continue
     totals.set(scene.exe, (totals.get(scene.exe) ?? 0) + (scene.end - scene.start))
   }
@@ -185,7 +202,7 @@ export function weekEntries(days: readonly WeekDay[], today?: string): WeekEntry
     if (!day) continue
     if (today !== undefined && date > today) continue
     for (const scene of day.scenes) {
-      if (scene.kind === 'shot') entries.push({ date, scene })
+      if (scene.kind === 'shot' && scene.mark !== 'extra') entries.push({ date, scene })
     }
   }
   return entries.sort((a, b) => a.scene.start - b.scene.start)
@@ -197,8 +214,8 @@ export function weekMetrics(days: readonly WeekDay[], today?: string): WeekMetri
   for (const { date, day } of days) {
     if (!day) continue
     if (today !== undefined && date > today) continue
-    activeMs += day.activeMs
-    cuts += day.cuts
+    activeMs += hasExtra(day) ? day.featureMs : day.activeMs
+    cuts += hasExtra(day) ? featureCuts(day) : day.cuts
   }
   const entries = weekEntries(days, today)
   let longestSeconds = 0
@@ -271,10 +288,14 @@ function buildStoryline(
     if (!day || date > today) continue
     const lines = new Map<string, number>()
     if (projects.length > 0) {
-      for (const item of totalByProject(day.scenes, projects)) lines.set(item.name, item.ms)
+      for (const item of totalByProject(
+        day.scenes.filter((scene) => scene.mark !== 'extra'),
+        projects
+      ))
+        lines.set(item.name, item.ms)
     } else {
       for (const scene of day.scenes) {
-        if (scene.kind !== 'shot') continue
+        if (scene.kind !== 'shot' || scene.mark === 'extra') continue
         lines.set(scene.exe, (lines.get(scene.exe) ?? 0) + (scene.end - scene.start))
       }
     }
@@ -373,7 +394,12 @@ export function buildWeekFilm(input: WeekFilmInput): WeekFilm {
     const future = date > input.today
     const usable = day !== null && !future ? day : null
     const line = mainLineOf(usable, input.projects)
-    const shots = usable ? usable.scenes.filter((scene) => scene.kind === 'shot') : []
+    const shots = usable ? featureScenes(usable) : []
+    const extraMs = usable
+      ? usable.scenes
+          .filter((scene) => scene.mark === 'extra')
+          .reduce((sum, scene) => sum + scene.seconds * 1000, 0)
+      : 0
     return {
       date,
       weekday: weekdayLabel(date),
@@ -382,8 +408,9 @@ export function buildWeekFilm(input: WeekFilmInput): WeekFilm {
       mainLine: line?.name ?? null,
       kind: line?.kind ?? null,
       longestSeconds: shots.reduce((longest, scene) => Math.max(longest, scene.seconds), 0),
-      cuts: usable?.cuts ?? 0,
+      cuts: usable ? (hasExtra(usable) ? featureCuts(usable) : usable.cuts) : 0,
       shots: shots.length,
+      extraMs,
       badges: []
     }
   })
@@ -494,6 +521,20 @@ export function buildWeekVerdict(
     delta: hasPrevious ? item.delta : '—'
   }))
 
+  // 本周花絮占比 > 10% 时补一句（只算花絮镜头，不含中场休息）
+  const extraMs = thisDays.reduce((sum, { day }) => {
+    if (!day) return sum
+    return (
+      sum +
+      day.scenes
+        .filter((scene) => scene.mark === 'extra')
+        .reduce((acc, scene) => acc + scene.seconds * 1000, 0)
+    )
+  }, 0)
+  const totalMs = current.activeMs + extraMs
+  const extraShare = totalMs > 0 ? extraMs / totalMs : 0
+  const extraClause = extraShare > 0.1 ? `；其中花絮占 ${Math.round(extraShare * 100)}%。` : null
+
   if (!hasPrevious) {
     return { sentence: '这是第一周，还没有可以对比的上周。', evidence, hasPrevious }
   }
@@ -502,11 +543,8 @@ export function buildWeekVerdict(
     .filter((item) => item.changed)
     .sort((a, b) => (b.magnitude === a.magnitude ? 0 : b.magnitude - a.magnitude))
   if (ranked.length === 0) {
-    return {
-      sentence: `本周与上周基本一样：最长镜头 ${current.longestSeconds > 0 ? fmtDuration(current.longestSeconds) : '—'}，剪辑密度每小时 ${current.cutRate.toFixed(1)} 次，活跃时长 ${fmtMinutes(current.activeMs)}。`,
-      evidence,
-      hasPrevious
-    }
+    const base = `本周与上周基本一样：最长镜头 ${current.longestSeconds > 0 ? fmtDuration(current.longestSeconds) : '—'}，剪辑密度每小时 ${current.cutRate.toFixed(1)} 次，活跃时长 ${fmtMinutes(current.activeMs)}。`
+    return { sentence: extraClause ? base.replace(/。$/, `${extraClause}`) : base, evidence, hasPrevious }
   }
 
   const clauses = ranked.slice(0, 2).map((item) => {
@@ -527,7 +565,12 @@ export function buildWeekVerdict(
       : `活跃时长比上周少 ${fmtMinutes(diff)}`
   })
 
-  return { sentence: `${clauses.join('；')}。`, evidence, hasPrevious }
+  const sentence = clauses.join('；')
+  return {
+    sentence: extraClause ? `${sentence}${extraClause}` : `${sentence}。`,
+    evidence,
+    hasPrevious
+  }
 }
 
 /* 本周精选 ----------------------------------------------------------- */

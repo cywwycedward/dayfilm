@@ -375,6 +375,8 @@ function applySettings(patch: unknown): Settings {
   }
   if (next.autoStart !== before.autoStart) applyAutoStart(next.autoStart)
   if (next.retentionDays !== before.retentionDays) runRetention()
+  // 自动花絮阈值影响所有已加载日期的汇总：改了就把缓存全清，下次读取按新规则算
+  if (next.autoExtraUnderSec !== before.autoExtraUnderSec) cache.invalidate()
   broadcast()
   return next
 }
@@ -625,7 +627,8 @@ if (!app.requestSingleInstanceLock()) {
       load: (date) => store.readDay(date),
       keep: SELF_EXE.length > 0 ? (sample) => sample.exe !== SELF_EXE : undefined,
       // 标记是读取时叠加的，变了不需要重建增量状态
-      marks: (date) => marks.get(date)
+      marks: (date) => marks.get(date),
+      autoExtraUnderSec: () => settings.get().autoExtraUnderSec
     })
     const buffer = new WriteBuffer({
       write: (sample) => store.append(sample),

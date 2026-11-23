@@ -1,9 +1,20 @@
 import { copyFileSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEFAULT_SETTINGS, RETENTION_OPTIONS, type HudSettings, type ProjectRule, type Settings } from '../../shared/settings'
+import {
+  AUTO_EXTRA_OPTIONS,
+  DEFAULT_SETTINGS,
+  RETENTION_OPTIONS,
+  type HudSettings,
+  type ProjectRule,
+  type Settings,
+  type SoundSettings
+} from '../../shared/settings'
 import { describeError } from '../errors'
 
 const RETENTION_VALUES: readonly number[] = RETENTION_OPTIONS.map((option) => option.value)
+/** 自动花絮阈值只接受这几个值（0 = 关闭）。 */
+const AUTO_EXTRA_VALUES: readonly number[] = AUTO_EXTRA_OPTIONS.map((option) => option.value)
+const SOUND_MODES: readonly SoundSettings['mode'][] = ['projector', 'cuts']
 const MAX_TERM_LENGTH = 64
 const MAX_TERMS = 100
 const MAX_PROJECTS = 20
@@ -12,6 +23,30 @@ const MAX_PROJECT_TERMS = 20
 
 function normalizeRetention(value: unknown, fallback: number): number {
   return typeof value === 'number' && RETENTION_VALUES.includes(value) ? value : fallback
+}
+
+/** 自动花絮阈值：只认白名单里的秒数，其它值回落到上一份合法值。 */
+function normalizeAutoExtra(value: unknown, fallback: number): number {
+  return typeof value === 'number' && AUTO_EXTRA_VALUES.includes(value) ? value : fallback
+}
+
+/** 音量夹到 0..1，并保留两位小数。 */
+function normalizeVolume(value: unknown, fallback: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  return Math.round(Math.min(1, Math.max(0, value)) * 100) / 100
+}
+
+/** 音效：mode 只接受 projector/cuts，volume 夹紧；不是对象时返回 null（调用方回落）。 */
+function normalizeSound(value: unknown, base: SoundSettings): SoundSettings | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const mode =
+    typeof record.mode === 'undefined'
+      ? base.mode
+      : SOUND_MODES.includes(record.mode as SoundSettings['mode'])
+        ? (record.mode as SoundSettings['mode'])
+        : base.mode
+  return { mode, volume: normalizeVolume(record.volume, base.volume) }
 }
 
 function normalizeBool(value: unknown, fallback: boolean): boolean {
@@ -86,13 +121,16 @@ export function normalizeSettings(raw: unknown, base: Settings = DEFAULT_SETTING
   const terms = normalizeTerms(record.redactTerms)
   const projects = normalizeProjects(record.projects)
   const hud = normalizeHud(record.hud, base.hud)
+  const sound = normalizeSound(record.sound, base.sound)
   return {
     retentionDays: normalizeRetention(record.retentionDays, base.retentionDays),
     redactTerms: terms ?? [...base.redactTerms],
     autoStart: normalizeBool(record.autoStart, base.autoStart),
     paused: normalizeBool(record.paused, base.paused),
     projects: projects ?? [...base.projects],
-    hud: hud ?? { ...base.hud }
+    hud: hud ?? { ...base.hud },
+    autoExtraUnderSec: normalizeAutoExtra(record.autoExtraUnderSec, base.autoExtraUnderSec),
+    sound: sound ?? { ...base.sound }
   }
 }
 
@@ -174,13 +212,16 @@ export class SettingsStore {
     const terms = 'redactTerms' in record ? normalizeTerms(record.redactTerms) : null
     const projects = 'projects' in record ? normalizeProjects(record.projects) : null
     const hud = 'hud' in record ? normalizeHud(record.hud, current.hud) : null
+    const sound = 'sound' in record ? normalizeSound(record.sound, current.sound) : null
     const next: Settings = {
       retentionDays: normalizeRetention(record.retentionDays, current.retentionDays),
       redactTerms: terms ?? current.redactTerms,
       autoStart: normalizeBool(record.autoStart, current.autoStart),
       paused: normalizeBool(record.paused, current.paused),
       projects: projects ?? current.projects,
-      hud: hud ?? { ...current.hud }
+      hud: hud ?? { ...current.hud },
+      autoExtraUnderSec: normalizeAutoExtra(record.autoExtraUnderSec, current.autoExtraUnderSec),
+      sound: sound ?? { ...current.sound }
     }
     this.save(next)
     return next

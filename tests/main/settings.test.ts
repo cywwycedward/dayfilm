@@ -49,7 +49,9 @@ describe('SettingsStore 读取', () => {
       autoStart: DEFAULT_SETTINGS.autoStart,
       paused: true,
       projects: [],
-      hud: DEFAULT_SETTINGS.hud
+      hud: DEFAULT_SETTINGS.hud,
+      autoExtraUnderSec: DEFAULT_SETTINGS.autoExtraUnderSec,
+      sound: DEFAULT_SETTINGS.sound
     })
   })
 
@@ -225,9 +227,20 @@ describe('SettingsStore 保存', () => {
       autoStart: true,
       paused: false,
       projects: [],
-      hud: DEFAULT_SETTINGS.hud
+      hud: DEFAULT_SETTINGS.hud,
+      autoExtraUnderSec: DEFAULT_SETTINGS.autoExtraUnderSec,
+      sound: DEFAULT_SETTINGS.sound
     })
-    expect(Object.keys(next).sort()).toEqual(['autoStart', 'hud', 'paused', 'projects', 'redactTerms', 'retentionDays'])
+    expect(Object.keys(next).sort()).toEqual([
+      'autoExtraUnderSec',
+      'autoStart',
+      'hud',
+      'paused',
+      'projects',
+      'redactTerms',
+      'retentionDays',
+      'sound'
+    ])
     expect(new SettingsStore(root).get()).toEqual(next)
   })
 
@@ -254,5 +267,56 @@ describe('SettingsStore 保存', () => {
     expect(() => store.update({ paused: true })).toThrow(/设置保存失败/)
     expect(existsSync(join(root, 'settings.json.tmp'))).toBe(false)
     warn.mockRestore()
+  })
+})
+
+describe('autoExtraUnderSec 归一（v2.6）', () => {
+  it('只接受 0 / 3 / 10 / 30', () => {
+    for (const value of [0, 3, 10, 30]) {
+      expect(normalizeSettings({ autoExtraUnderSec: value }).autoExtraUnderSec).toBe(value)
+    }
+    for (const value of [1, 5, 60, -3, '10', null, Number.NaN]) {
+      expect(normalizeSettings({ autoExtraUnderSec: value }).autoExtraUnderSec, String(value)).toBe(
+        DEFAULT_SETTINGS.autoExtraUnderSec
+      )
+    }
+  })
+
+  it('update 里非法值回落到上一份合法值', () => {
+    const store = new SettingsStore(tempRoot())
+    expect(store.update({ autoExtraUnderSec: 10 }).autoExtraUnderSec).toBe(10)
+    expect(store.update({ autoExtraUnderSec: 7 }).autoExtraUnderSec).toBe(10)
+    expect(store.update({ autoExtraUnderSec: 'lots' }).autoExtraUnderSec).toBe(10)
+    expect(store.update({ autoExtraUnderSec: 30 }).autoExtraUnderSec).toBe(30)
+  })
+})
+
+describe('sound 归一（v2.6）', () => {
+  it('mode 只接受 projector / cuts，其它值回落', () => {
+    expect(normalizeSettings({ sound: { mode: 'cuts', volume: 0.5 } }).sound).toEqual({ mode: 'cuts', volume: 0.5 })
+    expect(normalizeSettings({ sound: { mode: 'loud', volume: 0.5 } }).sound.mode).toBe(DEFAULT_SETTINGS.sound.mode)
+    expect(normalizeSettings({ sound: { mode: 42 } }).sound.mode).toBe(DEFAULT_SETTINGS.sound.mode)
+  })
+
+  it('volume 夹到 0..1 并保留两位小数', () => {
+    expect(normalizeSettings({ sound: { volume: 2 } }).sound.volume).toBe(1)
+    expect(normalizeSettings({ sound: { volume: -1 } }).sound.volume).toBe(0)
+    expect(normalizeSettings({ sound: { volume: 0.3456 } }).sound.volume).toBe(0.35)
+    expect(normalizeSettings({ sound: { volume: Number.NaN } }).sound.volume).toBe(DEFAULT_SETTINGS.sound.volume)
+    expect(normalizeSettings({ sound: { volume: '0.5' } }).sound.volume).toBe(DEFAULT_SETTINGS.sound.volume)
+  })
+
+  it('缺字段保留上一份；不是对象则整体回落', () => {
+    const store = new SettingsStore(tempRoot())
+    store.update({ sound: { mode: 'cuts', volume: 0.8 } })
+    // 只改音量，模式保留
+    expect(store.update({ sound: { volume: 0.2 } }).sound).toEqual({ mode: 'cuts', volume: 0.2 })
+    // 坏值整体回落
+    expect(store.update({ sound: 'off' }).sound).toEqual({ mode: 'cuts', volume: 0.2 })
+    expect(store.update({ paused: true }).sound).toEqual({ mode: 'cuts', volume: 0.2 })
+  })
+
+  it('默认值是 projector + 0.35', () => {
+    expect(normalizeSettings({}).sound).toEqual({ mode: 'projector', volume: 0.35 })
   })
 })

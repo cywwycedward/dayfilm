@@ -4523,3 +4523,87 @@ input[type='checkbox']:focus-visible {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* ==========================================================================
+   v2.6 放映音效设置 / 批量标记 / 自动花絮标签
+   ========================================================================== */
+
+.sound-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  margin-top: var(--s2);
+}
+
+.sound-modes {
+  display: flex;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+
+.sound-mode {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--paper-dim);
+  font: 400 12px/1 var(--font-ui);
+  cursor: pointer;
+}
+
+.sound-mode:hover {
+  color: var(--paper);
+  border-color: rgba(236, 231, 220, 0.3);
+}
+
+.sound-mode.is-active {
+  border-color: var(--amber);
+  background: var(--amber);
+  color: var(--ink);
+}
+
+.sound-mode:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.sound-volume {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+}
+
+.sound-volume input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.sound-volume__value {
+  min-width: 28px;
+  text-align: right;
+  font: 10px/1.4 var(--font-mono);
+  color: var(--paper-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 批量菜单项的禁用态 */
+.menu__item:disabled {
+  opacity: 0.35;
+  cursor: default;
+  text-decoration: none;
+}
+
+/* 自动花絮：比手动低一档透明度 */
+.recent .shot__mark.is-auto {
+  opacity: 0.68;
+}
+
+/* 七日叙事弧里的花絮行 */
+.arc__extra {
+  margin: 2px 0 0;
+  font: 10px/1.4 var(--font-mono);
+  color: #9aa0a6;
+  font-variant-numeric: tabular-nums;
+}
