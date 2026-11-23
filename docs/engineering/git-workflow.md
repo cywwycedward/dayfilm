@@ -67,4 +67,4 @@ worktree 有各自的工作目录、`HEAD` 和暂存区，分支、标签及默�
 
 建立 `develop` 之前，任务分支从 `main` 切出、合回 `main`，其余规则不变；建立之后可用 `git log --first-parent --oneline develop` 核对功能、修复与文档各自的合并提交，用 `git show --no-patch <提交>` 核对 `--no-ff` 留下的合并边界。
 
-标签的现状：11 个 annotated tag 全部落在 `main` 的历史上（`git merge-base --is-ancestor` 逐个返回 `0`）；除 `v1.2.0` 外每个标签的 `package.json` `version` 都与标签一致，`v1.2.0` 处仍是 `1.0.0`。`v2.3.0` 之后直接是 `v2.5.0`，`v2.4.0` 未发布。远端 `origin` 没有任何标签（`git ls-remote --tags origin` 为空），发布标签目前只存在于本地。发布提交的构成可用 `git show --stat b2d47e3` 核对：`package.json` 版本号、`docs/operations/delivery-verification.md` 的 v2.6 节与 `scripts/probe-v26.mjs` 在同一提交内；标签对象用 `git cat-file -p v2.6.0` 查看。
+标签的现状：11 个 annotated tag 全部落在 `main` 的历史上（`git merge-base --is-ancestor` 逐个返回 `0`）；除 `v1.2.0` 外每个标签的 `package.json` `version` 都与标签一致，`v1.2.0` 处仍是 `1.0.0`。`v2.3.0` 之后直接是 `v2.5.0`，`v2.4.0` 未发布。远端 `origin` 并非天然的发布台账，`git ls-remote --tags origin` 显示的是远端实际持有的标签。发布提交的构成可用 `git show --stat b2d47e3` 核对：`package.json` 版本号、`docs/operations/delivery-verification.md` 的 v2.6 节与 `scripts/probe-v26.mjs` 在同一提交内；标签对象用 `git cat-file -p v2.6.0` 查看。
