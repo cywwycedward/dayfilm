@@ -2,7 +2,7 @@
 
 - **当前结论** 图标与托盘按 `docs/product/visual-language.md` §7 重做完毕：一条命令产出六个文件，12 条自检断言全过，连续两次运行产出字节完全一致。打包链路（`electron-builder.yml`）与 `src/**` 未动，因此**三态托盘的入包与切换仍待接线**（见文末接续事项）。
 - **交接对象** 主 Agent（打包与托盘接线）。
-- **工作区与版本** `D:\core\workspace\mine\github_mine\not-my-app`，当前工作区未提交改动；本轮只碰 `build/**`、`resources/tray*.png`、`scripts/pack/make-icon.cjs`、本文件。
+- **工作区与版本** `D:\core\workspace\mine\github_mine\dayfilm`，当前工作区未提交改动；本轮只碰 `build/**`、`resources/tray*.png`、`scripts/pack/make-icon.cjs`、本文件。
 
 ## 文件清单
 

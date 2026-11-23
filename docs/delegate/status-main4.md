@@ -103,7 +103,7 @@ out/renderer/assets/index-uiB2jB3E.js 140.76 kB
 ### 1) clip name 改用 ASCII 分隔符
 
 - `src/main/edl/index.ts` 的 `clipName`：`exe — title` → `exe - title`（空格-连字符-空格）。**其余文本不动**，仍是 UTF-8 写盘（中文标题照样原样输出，只是分隔符用 ASCII，旧剪辑软件不会因为全角破折号变乱码）。
-- 单测：整行断言 `* FROM CLIP NAME: WindowsTerminal - LZD-20250906UAB: not-my-app`，并额外断言整份 EDL 里不含全角破折号 `—`（防止以后被改回去）。
+- 单测：整行断言 `* FROM CLIP NAME: WindowsTerminal - LZD-20250906UAB: dayfilm`，并额外断言整份 EDL 里不含全角破折号 `—`（防止以后被改回去）。
 
 ### 2) 写盘失败给可读错误，且不静默
 

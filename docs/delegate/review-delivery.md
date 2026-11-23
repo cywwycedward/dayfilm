@@ -1,6 +1,6 @@
 # 交付前独立评审（df-review）
 
-- **评审对象**：工作区 `not-my-app`。仓库无提交（`git rev-parse --short HEAD` → `fatal: your current branch 'main' does not have any commits yet`），`git status` 全部为未跟踪文件，因此本轮按"2026-11-22 19:55 (+08:00) 的工作区内容"评审（`src/main/index.ts` mtime 19:47、`src/renderer/src/app.ts` 19:40）。
+- **评审对象**：工作区 `dayfilm`。仓库无提交（`git rev-parse --short HEAD` → `fatal: your current branch 'main' does not have any commits yet`），`git status` 全部为未跟踪文件，因此本轮按"2026-11-22 19:55 (+08:00) 的工作区内容"评审（`src/main/index.ts` mtime 19:47、`src/renderer/src/app.ts` 19:40）。
 - **自跑结果**：`npm run typecheck` → exit=0；`npm test` → 19 文件 / 178 例通过（含 1 例性能基准，输出见发现 7）；`node scripts/pack/verify.cjs dist/win-unpacked` → exit=0（6 项断言全过）。
 - **额外证据**：把 `dist/win-unpacked/resources/app.asar` 解到 `%TEMP%` 逐文件比对，`out/main/index.js`、`out/preload/index.js`、`out/renderer/**` 与当前 `out/` **SHA-256 完全一致**（仅 asar 内 `package.json` 被 electron-builder 裁剪为 178 B），说明打包自检针对的就是当前源码构建；`Icon.ExtractAssociatedIcon(Dayfilm.exe)` 得到 32×32 图标，版本信息 `ProductName=Dayfilm/FileVersion=1.0.0/CompanyName=Dayfilm`。
 - **限制**：未启动应用、未跑 `npm run dev` / `npm run dist`；评审期间 `%APPDATA%\dayfilm\days\2026-11-22.jsonl` 有实例在持续追加（183 行、0 坏行、0 条 `[已隐藏]`），我仅只读统计，未做任何启动/退出/破坏性实验。临时探针放在 `%TEMP%\dayfilm-review\`，未进仓库。

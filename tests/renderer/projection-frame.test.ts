@@ -7,7 +7,7 @@ const base = {
   shot: 26,
   total: 60,
   exe: 'WindowsTerminal',
-  title: 'LZD-20250906UAB: not-my-app',
+  title: 'LZD-20250906UAB: dayfilm',
   hue: 280,
   start: new Date(2026, 10, 22, 20, 45).getTime(),
   end: new Date(2026, 10, 22, 20, 47).getTime(),
@@ -25,7 +25,7 @@ describe('放映画面版式', () => {
     const texts = params.lines.map((line) => line.text)
     expect(texts[0]).toBe('2026-11-22 · SHOT 26 / 60')
     expect(texts[1]).toBe('WINDOWSTERMINAL')
-    expect(texts[2]).toBe('LZD-20250906UAB: not-my-app')
+    expect(texts[2]).toBe('LZD-20250906UAB: dayfilm')
     expect(texts[3]).toBe('20:45–20:47')
     expect(texts[4]).toBe('2 分 42 秒 / 4 分 14 秒')
   })

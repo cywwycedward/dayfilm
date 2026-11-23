@@ -138,13 +138,13 @@ describe('HUD 文案', () => {
   test('拍摄中：REC + 应用名 + 标题 + 今日三组', () => {
     const scene = shot('c', 899, 1)
     scene.exe = 'WindowsTerminal'
-    scene.title = 'LZD-20250906UAB: not-my-app'
+    scene.title = 'LZD-20250906UAB: dayfilm'
     const view = hudView(live(scene), now)
     expect(view).toMatchObject({
       mood: 'shooting',
       status: 'REC',
       exe: 'WindowsTerminal',
-      title: 'LZD-20250906UAB: not-my-app',
+      title: 'LZD-20250906UAB: dayfilm',
       ticking: true
     })
     expect(view.today).toEqual({ shots: 2, cuts: 3, verdict: '跳切风暴' })

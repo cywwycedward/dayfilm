@@ -82,7 +82,7 @@ out/renderer/index.html 4.59 kB / assets/index-D3heVhbd.css 16.82 kB / assets/in
 采集子进程命令行（`ParentProcessId` 为 electron 主进程）：
 
 ```text
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\core\workspace\mine\github_mine\not-my-app\resources\capture.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\core\workspace\mine\github_mine\dayfilm\resources\capture.ps1
 ```
 
 落盘结果（两次运行累计 27 行，窗口关闭后停止增长）：
@@ -91,7 +91,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\core\workspace\mine\g
 day file: C:\Users\Administrator\AppData\Roaming\dayfilm\days\2026-11-22.jsonl  exists=True
 {"t":1795344886211,"exe":"electron","title":"Dayfilm","idleMs":212031}
 {"t":1795344888223,"exe":"electron","title":"Dayfilm","idleMs":214047}
-{"t":1795344908777,"exe":"WindowsTerminal","title":"LZD-20250906UAB: not-my-app","idleMs":0}
+{"t":1795344908777,"exe":"WindowsTerminal","title":"LZD-20250906UAB: dayfilm","idleMs":0}
 ```
 
 渲染进程日志（`ELECTRON_ENABLE_LOGGING=1`）只有 `[vite] connecting... / connected`，没有 IPC 或主进程报错。`Port 5173 is in use` 是界面实现者的 dev server，本次 dev 走 5174。
@@ -126,7 +126,7 @@ samples=27 scenes=3 cuts=0 rate=0
 题材：长镜头。最长的一个镜头是 WindowsTerminal 的 1 分钟。活跃 1 分钟，中场休息 1 分钟，1 个镜头，0 次剪辑。
 
 - [18:54–18:55] （中场休息 1m）
-- [18:55–18:55] WindowsTerminal · LZD-20250906UAB: not-my-app（1m）
+- [18:55–18:55] WindowsTerminal · LZD-20250906UAB: dayfilm（1m）
 - [18:57–18:57] （中场休息 1m）
 ```
 

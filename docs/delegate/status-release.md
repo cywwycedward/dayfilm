@@ -97,7 +97,7 @@ renderer 的哈希文件名每次 `npm run pack` 都会变——`src/**` 正在�
 ```json
 {
   "ok": true,
-  "unpackDir": "D:\\core\\workspace\\mine\\github_mine\\not-my-app\\dist\\win-unpacked",
+  "unpackDir": "D:\\core\\workspace\\mine\\github_mine\\dayfilm\\dist\\win-unpacked",
   "checks": [
     { "name": "exe", "ok": true, "path": "...\\dist\\win-unpacked\\Dayfilm.exe", "bytes": 188784128 },
     { "name": "asar", "ok": true, "path": "...\\dist\\win-unpacked\\resources\\app.asar", "bytes": 125682 },

@@ -9,7 +9,7 @@ const DATE = '2026-11-22'
 /** 本地时间 20:21:30.000 */
 const START = new Date(2026, 10, 22, 20, 21, 30, 0).getTime()
 
-function scene(startMs: number, endMs: number, exe = 'WindowsTerminal', title = 'LZD-20250906UAB: not-my-app', mark?: 'feature' | 'extra'): Scene {
+function scene(startMs: number, endMs: number, exe = 'WindowsTerminal', title = 'LZD-20250906UAB: dayfilm', mark?: 'feature' | 'extra'): Scene {
   return {
     id: `${DATE}-x`,
     start: START + startMs,
@@ -80,7 +80,7 @@ describe('renderEdl', () => {
     expect(lines[2]).toBe('')
     // 20:21:30.000 → 20:23:12.000（1 分 42 秒），记录轨 01:00:00:00 → 01:01:42:00
     expect(lines[3]).toBe('001  AX       V     C        20:21:30:00 20:23:12:00 01:00:00:00 01:01:42:00')
-    expect(lines[4]).toBe('* FROM CLIP NAME: WindowsTerminal - LZD-20250906UAB: not-my-app')
+    expect(lines[4]).toBe('* FROM CLIP NAME: WindowsTerminal - LZD-20250906UAB: dayfilm')
     // 分隔符必须是 ASCII：全角破折号在旧剪辑软件里容易变成乱码
     expect(lines[4]).not.toContain('—')
     expect(text).not.toContain('—')
@@ -161,7 +161,7 @@ describe('writeEdlFile', () => {
     await writeEdlFile(target, day([scene(0, 102_000)]))
     const text = readFileSync(target, 'utf8')
     expect(text.startsWith('TITLE: Dayfilm 2026-11-22\nFCM: NON-DROP FRAME\n')).toBe(true)
-    expect(text).toContain('* FROM CLIP NAME: WindowsTerminal - LZD-20250906UAB: not-my-app')
+    expect(text).toContain('* FROM CLIP NAME: WindowsTerminal - LZD-20250906UAB: dayfilm')
   })
 
   it('目标不可写时报可读错误，不会静默，也不留半个文件', async () => {

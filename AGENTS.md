@@ -1,4 +1,4 @@
-# not-my-app 的 Agent 入口
+# dayfilm 的 Agent 入口
 
 任务开始时查阅 [Agent 规则索引](docs/agents/INDEX.md)，按任务类型和影响范围定位适用的规则、工作流及项目知识。影响范围变化时，补查新增约束。
 

@@ -8,7 +8,7 @@
 ## 启动
 
 ```powershell
-cd D:\core\workspace\mine\github_mine\not-my-app
+cd D:\core\workspace\mine\github_mine\dayfilm
 npm install
 npm run dev
 ```

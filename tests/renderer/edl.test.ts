@@ -6,7 +6,7 @@ import { startOfDay } from '../../src/renderer/src/lib/time'
 const MINUTE = 60_000
 const dayStart = startOfDay('2026-11-22')
 
-function shot(id: string, fromMinute: number, minutes: number, exe = 'WindowsTerminal', title = 'LZD-20250906UAB: not-my-app'): Scene {
+function shot(id: string, fromMinute: number, minutes: number, exe = 'WindowsTerminal', title = 'LZD-20250906UAB: dayfilm'): Scene {
   const start = dayStart + fromMinute * MINUTE
   return { id, start, end: start + minutes * MINUTE, exe, title, seconds: minutes * 60, kind: 'shot' }
 }
@@ -63,7 +63,7 @@ describe('EDL 文本', () => {
     const lines = edl.split('\n')
     expect(lines.filter((line) => /^\d{3}\s+AX/.test(line))).toHaveLength(2)
     expect(lines[3]).toContain('001  AX       V     C        ')
-    expect(lines[4]).toBe('* FROM CLIP NAME: WindowsTerminal — LZD-20250906UAB: not-my-app')
+    expect(lines[4]).toBe('* FROM CLIP NAME: WindowsTerminal — LZD-20250906UAB: dayfilm')
     expect(lines[5]).toMatch(/^002  AX/)
     expect(edl).not.toContain('中场休息')
   })

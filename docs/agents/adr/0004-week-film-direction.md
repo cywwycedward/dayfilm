@@ -2,7 +2,7 @@
 
 - 状态：已采纳
 - 日期：2026-11-22
-- 来源：外部裁决（ChatGPT，项目 `not-my-app`），提问与回答留档在 `docs/delegate/ask-gpt-1.txt` 与 `docs/delegate/gpt-answer-1.md`
+- 来源：外部裁决（ChatGPT，项目 `dayfilm`），提问与回答留档在 `docs/delegate/ask-gpt-1.txt` 与 `docs/delegate/gpt-answer-1.md`
 
 ## 背景
 

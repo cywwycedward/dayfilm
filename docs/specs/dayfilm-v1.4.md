@@ -39,7 +39,7 @@ TITLE: Dayfilm 2026-11-22
 FCM: NON-DROP FRAME
 
 001  AX       V     C        20:21:30:00 20:23:12:00 01:00:00:00 01:01:42:00
-* FROM CLIP NAME: WindowsTerminal — LZD-20250906UAB: not-my-app
+* FROM CLIP NAME: WindowsTerminal — LZD-20250906UAB: dayfilm
 ```
 
 3. 时间码为 HH:MM:SS:FF（帧率 24），记录时间从 01:00:00:00 起连续排布。

@@ -33,7 +33,7 @@
 
 - `renderEdl(day: DayRollup): string` 纯函数，按规格 R42 生成 CMX3600（24fps，记录时间从 01:00:00:00 起，连续排布）。
 - 时间码换算：毫秒 → HH:MM:SS:FF，帧向上取整；跨天不做特殊处理。
-- 跳过 `kind: 'intermission'` 的镜头；空标题用"未命名窗口"；clip name 形如 `WindowsTerminal — LZD-20250906UAB: not-my-app`。
+- 跳过 `kind: 'intermission'` 的镜头；空标题用"未命名窗口"；clip name 形如 `WindowsTerminal — LZD-20250906UAB: dayfilm`。
 - `exportEdl(date)`：日期校验 → 保存对话框（默认名 `dayfilm-<date>.edl`，过滤 `.edl`）→ 强制扩展名 → 写盘；取消或非法日期返回 `{ path: '' }`，写失败抛可读错误。
 - 单测：事件编号与时间码、跨小时、跳过中场休息、空标题、帧取整边界（999ms、59.999s）、非法日期。
 
