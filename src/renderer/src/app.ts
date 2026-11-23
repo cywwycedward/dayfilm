@@ -162,6 +162,7 @@ interface Ui {
   heroStill: HTMLElement
   heroFrameTag: HTMLElement
   heroFrameEmpty: HTMLElement
+  heroFrameEmptyTitle: HTMLElement
   heroFrameEmptyText: HTMLElement
   metricShot: HTMLElement
   metricLongest: HTMLElement
@@ -367,6 +368,7 @@ function collect(root: HTMLElement): Ui {
     heroStill: pick<HTMLElement>('heroStill'),
     heroFrameTag: pick<HTMLElement>('heroFrameTag'),
     heroFrameEmpty: pick<HTMLElement>('heroFrameEmpty'),
+    heroFrameEmptyTitle: pick<HTMLElement>('heroFrameEmptyTitle'),
     heroFrameEmptyText: pick<HTMLElement>('heroFrameEmptyText'),
     metricShot: pick<HTMLElement>('metricShot'),
     metricLongest: pick<HTMLElement>('metricLongest'),
@@ -555,20 +557,14 @@ function measure(): void {
 /** 最近镜头只显示整行，底部留 12px 内边距，不被面板底边切掉。 */
 function fitRecentList(): void {
   const block = ui.listScroll.closest<HTMLElement>('.rail__block')
-  const rail = block?.parentElement
-  if (!block || !rail) return
-  const railH = rail.clientHeight
-  if (railH <= 0) return
-  let others = 0
-  for (const child of rail.children) {
-    if (child !== block) others += (child as HTMLElement).getBoundingClientRect().height
-  }
-  // 块的固定开销（内边距 + 标题 + 表头 + 间隔）；列表高度参与不了，所以量一次就稳定
-  const rawChrome = block.getBoundingClientRect().height - ui.listScroll.getBoundingClientRect().height
-  const chrome = rawChrome > 0 && rawChrome < 160 ? rawChrome : 100
-  const room = Math.max(0, railH - others - 32 - chrome)
-  // 可见行数 = 可用高 ÷ 行高取整（再多留 4px 防亚像素误差），不设下限，宁少不破行
-  const rows = Math.max(0, Math.floor((room - 12) / rowStride))
+  if (block === null) return
+  const head = block.querySelector('.rail__head')?.getBoundingClientRect().height ?? 0
+  const cols = block.querySelector('.recent__cols')?.getBoundingClientRect().height ?? 0
+  const style = getComputedStyle(block)
+  const padY = Number.parseFloat(style.paddingTop) + Number.parseFloat(style.paddingBottom)
+  // 面板内高 − 表头 − 列头 − 两个 8px 间隔 − 8px 底部内距 → 行数取整
+  const available = block.clientHeight - padY - head - cols - 16 - 8
+  const rows = Math.max(1, Math.floor(available / rowStride))
   const target = rows * rowStride + 8
   if (Math.abs(ui.listScroll.getBoundingClientRect().height - target) > 0.5) {
     ui.listScroll.style.height = `${target}px`
@@ -656,12 +652,20 @@ function onSpineClick(event: MouseEvent): void {
 
 function onSpineKey(event: KeyboardEvent): void {
   const viewport = ui.spineScroll
+  const page = Math.max(1, Math.floor(viewport.clientHeight / SPINE_FRAME_H)) * SPINE_FRAME_H
+  const snap = (value: number): number => Math.round(value / SPINE_FRAME_H) * SPINE_FRAME_H
   if (event.key === 'Home') {
     event.preventDefault()
-    viewport.scrollTop = 0
+    viewport.scrollTo({ top: 0, behavior: 'smooth' })
   } else if (event.key === 'End') {
     event.preventDefault()
-    viewport.scrollTop = viewport.scrollHeight
+    viewport.scrollTo({ top: snap(viewport.scrollHeight), behavior: 'smooth' })
+  } else if (event.key === 'PageDown') {
+    event.preventDefault()
+    viewport.scrollTo({ top: snap(viewport.scrollTop + page), behavior: 'smooth' })
+  } else if (event.key === 'PageUp') {
+    event.preventDefault()
+    viewport.scrollTo({ top: snap(viewport.scrollTop - page), behavior: 'smooth' })
   } else if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault()
     const index = spineFrameIndex(state.playhead, state.date)
@@ -674,6 +678,16 @@ function onSpineKey(event: KeyboardEvent): void {
     return
   }
   paintSpineCanvas()
+}
+
+/** 滚轮 = 一帧（32px）的整数倍，配合 CSS 的 smooth 滚动。 */
+function onSpineWheel(event: WheelEvent): void {
+  if (event.deltaY === 0) return
+  event.preventDefault()
+  const viewport = ui.spineScroll
+  const base = Math.round(viewport.scrollTop / SPINE_FRAME_H) * SPINE_FRAME_H
+  const step = event.deltaY > 0 ? SPINE_FRAME_H : -SPINE_FRAME_H
+  viewport.scrollTo({ top: Math.max(0, base + step), behavior: 'smooth' })
 }
 
 function renderHero(): void {
@@ -709,11 +723,17 @@ function fmtHoursMinutes(ms: number): string {
 function renderStats(): void {
   const day = state.day
   const shots = day.scenes.filter((scene) => scene.kind === 'shot')
-  const metrics: [string, string][] = [
-    ['活跃时长', fmtHoursMinutes(day.activeMs)],
-    ['镜头数', String(shots.length)],
-    ['剪辑数', String(day.cuts)]
-  ]
+  const metrics: [string, string][] = day.scenes.length === 0
+    ? [
+        ['活跃时长', '—'],
+        ['镜头数', '—'],
+        ['剪辑数', '—']
+      ]
+    : [
+        ['活跃时长', fmtHoursMinutes(day.activeMs)],
+        ['镜头数', String(shots.length)],
+        ['剪辑数', String(day.cuts)]
+      ]
   ui.metrics.replaceChildren(
     ...metrics.map(([label, value]) => {
       const cell = node('div', 'metric')
@@ -903,10 +923,15 @@ function updateTransport(): void {
       ui.heroFrameTag.textContent = intermission ? '中场休息' : ''
       const next = state.day.scenes.find((item) => item.start > state.playhead)
       ui.heroFrameEmpty.hidden = intermission
-      let emptyText = '摄影机未运行 · 这一天的胶片到此结束'
-      if (state.day.scenes.length === 0) emptyText = '还没有拍摄任何素材'
-      else if (next) emptyText = `摄影机未运行 · 下一镜 ${fmtClock(next.start)}`
-      ui.heroFrameEmptyText.textContent = emptyText
+      if (state.day.scenes.length === 0) {
+        ui.heroFrameEmptyTitle.textContent = '摄影机还没开'
+        ui.heroFrameEmptyText.textContent = 'Dayfilm 在后台记录，第一个镜头出现后会出现在这里'
+      } else {
+        let emptyText = '摄影机未运行 · 这一天的胶片到此结束'
+        if (next) emptyText = `摄影机未运行 · 下一镜 ${fmtClock(next.start)}`
+        ui.heroFrameEmptyTitle.textContent = '空档'
+        ui.heroFrameEmptyText.textContent = emptyText
+      }
     }
   }
 
@@ -2611,6 +2636,7 @@ function bindEvents(): void {
   })
   ui.spineScroll.addEventListener('click', onSpineClick)
   ui.spineScroll.addEventListener('keydown', onSpineKey)
+  ui.spineScroll.addEventListener('wheel', onSpineWheel, { passive: false })
   ui.spineScroll.addEventListener('scroll', () => {
     if (scrollRaf !== 0) return
     scrollRaf = requestAnimationFrame(() => {
