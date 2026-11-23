@@ -1,4 +1,4 @@
-# 可交付版本验证记录
+﻿# 可交付版本验证记录
 
 R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读取界面与 IPC + 进程与文件观测"为主，单元测试只作为其中一项证据。测量设备与细节见[性能与容量实测](perf-report.md)。
 
@@ -101,7 +101,7 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 | R53 剧本 PDF | 通过 | 通过真实保存对话框导出 A4 深色 PDF（104 KB），在 Edge 中确认非空白：标题、题材、三项数字、镜头表（时间区间/应用/标题/时长）齐全；修复过「白页」问题（隐藏窗口未等字体与首帧、缺 print-color-adjust、无空内容兜底） |
 | R54 全局快捷键 | 通过 | `Ctrl+Alt+D` 实测隐藏 HUD 并把 `settings.hud.visible` 写成 false，再按一次恢复；`Ctrl+Alt+P` 由主进程发 `dayfilm:projection-toggle`，界面侧订阅切换放映；注册失败只提示不阻塞启动 |
 
-累计：`npm run typecheck` exit=0，`npm test` 35 文件 / 400+ 例通过，`npm run build` 通过。
+累计：`npm run typecheck` exit=0，`npm test` 40 文件 / 548 例通过，`npm run build` 通过。
 
 ## 复现命令
 
@@ -125,3 +125,4 @@ node scripts/pack/verify.cjs dist\win-unpacked
 - **代码签名**：无证书，首次运行会有 SmartScreen"未知发布者"提示。
 - **真机休眠/唤醒**：只核对了 `powerMonitor` 事件接线与逻辑，没有真的合盖测试。
 - **便携 exe 的远程调试**：NSIS 便携包不转发 `--remote-debugging-port`，因此便携版的证据来自窗口无障碍树与数据落盘，而不是 DevTools 协议。
+
