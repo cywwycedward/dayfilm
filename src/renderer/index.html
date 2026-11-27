@@ -106,6 +106,7 @@
           <p class="hero__intermission" id="intermission" hidden></p>
           <section class="discoveries" id="discoveries" aria-label="剪辑发现" hidden></section>
 
+          <div class="hero__band">
           <p class="hero__window">
             <span class="hero__window-label">当前窗口</span>
             <strong id="liveExe">…</strong>
@@ -126,6 +127,7 @@
               <dd id="metricProject">…</dd>
             </div>
           </dl>
+          </div>
 
           <figure class="hero__frame" id="heroFrame" data-kind="empty">
             <div class="hero__frame-still" id="heroStill" role="img" aria-label="当前镜头剧照"></div>
@@ -190,10 +192,17 @@
         <aside class="rail">
           <section class="rail__block">
             <header class="rail__head">
-              <h2 style="font-size: 14px">放映</h2>
+              <h2>放映</h2>
             </header>
             <div class="player">
-              <button class="player__play" id="play" type="button" aria-label="播放">▶</button>
+              <button class="player__play" id="play" type="button" aria-label="播放">
+                <svg class="player__icon player__icon--play" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M4.5 2.5 13 8l-8.5 5.5z" />
+                </svg>
+                <svg class="player__icon player__icon--pause" viewBox="0 0 16 16" aria-hidden="true">
+                  <path d="M4.5 2.5h2.5v11H4.5zM9 2.5h2.5v11H9z" />
+                </svg>
+              </button>
               <div class="speeds" role="group" aria-label="回放倍速">
                 <button class="speed" type="button" data-speed="60" aria-pressed="false">60x</button>
                 <button class="speed" type="button" data-speed="600" aria-pressed="false">600x</button>
@@ -217,7 +226,7 @@
 
           <section class="rail__block">
             <header class="rail__head">
-              <h2 style="font-size: 14px">今日统计</h2>
+              <h2>今日统计</h2>
             </header>
             <dl class="stats" id="metrics"></dl>
             <p class="stats__marks" id="statMarks"></p>
@@ -235,7 +244,7 @@
 
           <section class="rail__block rail__block--grow">
             <header class="rail__head">
-              <h2 style="font-size: 14px">最近镜头</h2>
+              <h2>最近镜头</h2>
               <span id="listCount"></span>
             </header>
             <div class="recent__cols" aria-hidden="true">

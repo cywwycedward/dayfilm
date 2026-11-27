@@ -700,8 +700,7 @@ function paintSpineCanvas(): void {
   const canvas = ui.spineCanvas
   const viewport = ui.spineScroll
   const spineWidth = viewport.clientWidth
-  // 画布比脊柱宽 96px：右侧留出「现在」标签的位置
-  const width = spineWidth + 96
+  const width = spineWidth
   const height = viewport.clientHeight
   if (spineWidth <= 0 || height <= 0) return
   const ctx = sizeCanvas(canvas, width, height)
@@ -713,10 +712,7 @@ function paintSpineCanvas(): void {
   const offset = ((state.playhead - dayStart()) / SPINE_FRAME_MS) * SPINE_FRAME_H - scrollTop
   paintSpine(ctx, spineFrameData(), range, scrollTop, SPINE_FRAME_H, spineWidth, width, height, {
     y: offset,
-    label: isToday() ? `现在 ${fmtClock(state.playhead)}` : fmtClock(state.playhead)
-  }, {
-    date: state.date,
-    ordinals: dayOrdinals()
+    label: fmtClock(state.playhead)
   })
 }
 
@@ -1233,10 +1229,9 @@ function toast(message: string): void {
   }, 6000)
 }
 
-/** 主按钮只有播放/暂停两个面，用符号保持 40×40 的方形。 */
+/** 主按钮只有播放/暂停两个面：两个 SVG 靠 data-state 切换。 */
 function setPlayButton(playing: boolean): void {
   state.playing = playing
-  ui.playBtn.textContent = playing ? '❚❚' : '▶'
   ui.playBtn.dataset.state = playing ? 'playing' : 'paused'
   ui.playBtn.setAttribute('aria-label', playing ? '暂停' : '播放')
 }
@@ -1472,7 +1467,6 @@ function startProjection(): void {
   projection = enterProjection(from, state.day.scenes, { speed: state.speed, sound: projection.sound })
   if (projection.total === 0) return
   state.playing = true
-  ui.playBtn.textContent = '暂停'
   ui.playBtn.dataset.state = 'playing'
   ui.projection.hidden = false
   ui.soundToggle.textContent = projection.sound ? '声音：开' : '声音：关'
