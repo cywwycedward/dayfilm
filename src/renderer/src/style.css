@@ -183,13 +183,11 @@ body::-webkit-scrollbar,
 .hint,
 .reel__title,
 .shots__head h2,
-.arc__when,
 .story__mark,
 .story__total,
 .rank--empty,
 .pick__reason,
 .week-evidence summary,
-.panel__head h2,
 .fieldset h3 {
   font: 10px/1.3 var(--font-mono);
   letter-spacing: 0.18em;
@@ -1453,6 +1451,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .panel__head h2 {
   margin: 0;
+  font: 600 20px/1.3 var(--font-ui);
+  letter-spacing: normal;
   color: var(--paper);
 }
 
@@ -1474,6 +1474,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .nav-item {
   padding: 7px 20px;
   border: 0;
+  border-inline-start: 1px solid transparent;
   background: transparent;
   color: rgba(236, 231, 220, 0.45);
   font: 400 12px/1.4 var(--font-mono);
@@ -1488,6 +1489,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .nav-item.is-active {
+  border-inline-start-color: var(--amber);
   background: rgba(232, 180, 90, 0.07);
   color: var(--amber);
 }
@@ -1503,7 +1505,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .nav-item:focus-visible {
-  outline: none;
+  outline: 2px solid var(--amber);
+  outline-offset: -3px;
   color: var(--paper);
   text-decoration: underline;
   text-underline-offset: 3px;
@@ -1971,7 +1974,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: var(--s2) var(--s3) var(--s2) 0;
+  min-width: 0;
+  padding: var(--s2);
   border: none;
   border-right: 1px solid var(--hairline);
   background: transparent;
@@ -2000,14 +2004,15 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .arc__head {
   display: flex;
-  align-items: baseline;
-  gap: var(--s2);
+  flex-direction: column;
+  gap: var(--s1);
   min-width: 0;
 }
 
 .arc__when {
   flex: none;
-  opacity: 0.4;
+  font: 11px/1.4 var(--font-mono);
+  color: var(--paper-dim);
 }
 
 .arc__line {
@@ -2030,7 +2035,19 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   gap: var(--s2);
   min-width: 0;
   font: 10px/1.4 var(--font-mono);
-  color: rgba(236, 231, 220, 0.4);
+  color: var(--paper-dim);
+}
+
+.arc__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  margin-top: var(--s1);
+}
+
+.arc__badges .tag {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .arc__meta-text {
@@ -3195,7 +3212,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   gap: var(--s5);
   min-height: 0;
   padding: var(--s5);
-  overflow: hidden;
+  overflow: auto;
 }
 
 /* hero --------------------------------------------------------------- */
@@ -3205,8 +3222,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   flex-direction: column;
   gap: 0;
   min-width: 0;
-  min-height: 0;
-  overflow: hidden;
+  min-height: min-content;
 }
 
 .hero__clapper {
@@ -3280,16 +3296,16 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   margin: 8px 0 0;
   overflow: hidden;
   font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', var(--font-ui);
-  font-size: 128px;
+  font-size: 80px;
   font-weight: 900;
-  line-height: 0.88;
-  letter-spacing: 0.02em;
+  line-height: 1;
+  letter-spacing: normal;
   color: var(--paper);
   white-space: nowrap;
 }
 
 .hero__genre[data-empty='true'] {
-  font-size: 64px;
+  font-size: 56px;
   line-height: 1;
   color: var(--paper-dim);
 }
@@ -3299,7 +3315,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   max-width: 640px;
   margin: 8px 0 0;
   font: 400 16px/1.5 var(--font-ui);
-  color: var(--paper-dim);
+  color: var(--silver);
 }
 
 /* 剪辑发现（v3）：题材下面最多三行，都可点回证据镜头 */
@@ -3330,6 +3346,13 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .discovery:hover .discovery__text {
   color: var(--paper);
+}
+
+.discovery:focus-visible,
+.hero__episode:focus-visible,
+.project__edit:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: -2px;
 }
 
 .discovery__label {
@@ -3431,7 +3454,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 .hero__frame {
   position: relative;
   flex: 1 1 auto;
-  min-height: 120px;
+  min-height: 168px;
+  max-height: 240px;
   margin: 8px 0 0;
   overflow: hidden;
   background: var(--panel);
@@ -3640,10 +3664,8 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .rail__head h2 {
   margin: 0;
-  font: 400 10px/1.4 var(--font-mono);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--paper-dim);
+  font: 600 13px/1.4 var(--font-ui);
+  color: var(--paper);
 }
 
 .rail__head span {
@@ -3907,10 +3929,6 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
     min-height: 0;
     height: max-content;
     overflow: visible;
-  }
-
-  .hero__frame {
-    min-height: 160px;
   }
 
   .spine {
@@ -4223,11 +4241,12 @@ h2 {
 
 /* 3) hero 空档态：与放映空档一致的两行文案 */
 .hero__frame-still {
+  position: absolute;
+  inset: 0;
   display: block;
-  width: 100%;
-  height: 100%;
   background-position: center;
-  background-size: cover;
+  background-repeat: no-repeat;
+  background-size: contain;
 }
 
 .hero__frame[data-kind='empty'] .hero__frame-still,
@@ -4965,6 +4984,11 @@ input[type='checkbox']:focus-visible {
   text-decoration: none;
 }
 
+#projectForm input,
+#projectForm .btn {
+  height: 32px;
+}
+
 .candidate__head {
   align-items: center;
   justify-content: space-between;
@@ -4994,7 +5018,6 @@ input[type='checkbox']:focus-visible {
 
 /* 键盘焦点：所有可点元素同一道环，不靠 UA 默认 */
 .btn:focus-visible,
-.nav-item:focus-visible,
 .sound-mode:focus-visible,
 .candidate__add:focus-visible,
 .project__remove:focus-visible,
@@ -5212,6 +5235,12 @@ input[type='checkbox']:focus-visible {
   align-items: center;
   min-height: 22px;
   padding: 0 4px;
+  color: var(--paper-dim);
+}
+
+.project__remove:hover,
+.project__remove:focus-visible {
+  color: #ee958e;
 }
 
 .project__edit:hover {
@@ -5279,6 +5308,8 @@ input[type='checkbox']:focus-visible {
 .hero__episode {
   flex: none;
   margin: 12px 0 0;
+  padding-top: var(--s2);
+  border-top: 1px solid var(--hairline);
   font: 400 13px/1.5 var(--font-ui);
   color: var(--paper-dim);
   white-space: pre-line;

@@ -1107,8 +1107,8 @@ function updateTransport(): void {
             { exe: scene.exe, title: scene.title, kind: scene.kind },
             dayOrdinals().get(scene.id) ?? 0,
             isoDate(scene.start),
-            720,
-            280
+            840,
+            192
           )
         : ''
     ui.heroStill.style.backgroundImage = stillUrl.length > 0 ? `url("${stillUrl}")` : ''
@@ -3040,8 +3040,7 @@ function renderArcs(film: WeekFilm): void {
     card.setAttribute('aria-label', `${act.date} ${act.weekday} ${arcLabel(act, column)}`)
     if (!act.hasData) card.classList.add('arc--empty')
     if (act.future) card.classList.add('arc--future')
-    // 固定两行：日+ 主线 / 最长与剪辑（徽标跟在第二行末尾
-const head = node('div', 'arc__head')
+    const head = node('div', 'arc__head')
     head.append(
       node('span', 'arc__when', `${act.date.slice(5)} ${act.weekday}`),
       node('span', 'arc__line', arcLabel(act, column))
@@ -3052,10 +3051,14 @@ const head = node('div', 'arc__head')
       meta.append(
         node('span', 'arc__meta-text', `最长 ${fmtDuration(act.longestSeconds)} · ${act.cuts} 次剪辑`)
       )
-      for (const badge of act.badges) {
-        meta.append(node('span', badge.kind === 'switch' ? 'tag tag--switch' : 'tag', badge.text))
-      }
       card.append(meta)
+      if (act.badges.length > 0) {
+        const badges = node('div', 'arc__badges')
+        for (const badge of act.badges) {
+          badges.append(node('span', badge.kind === 'switch' ? 'tag tag--switch' : 'tag', badge.text))
+        }
+        card.append(badges)
+      }
       if (act.extraMs > 0) {
         card.append(node('p', 'arc__extra', `花絮 ${fmtMinutes(act.extraMs)}`))
       }

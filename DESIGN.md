@@ -197,3 +197,11 @@ Dayfilm 的视觉系统。产品真相见 [PRODUCT.md](PRODUCT.md)，界面铬�
 - **周视图顶栏的 `换戏` 徒章**依旧压到右邻列，周视图本轮未动。
 - **抽屉行**（编辑/删除危险色、添加键高与输入底线齐）本轮未动，仅在 v4.2 登记。
 - 960 下脊柱只占 400px 高（它的 `min-height`），看起来像半截立柱；要贴满需要单独做 sticky。
+
+## v4.3 · 剧照优先
+
+本节取代上文的日视图题材字号、剧照高度目标及证据顺序，规范见[视觉语言](docs/product/visual-language.md#复盘工作台v43)。基线为本地提交 `4650fb7` 的 Electron 构建，以模拟记录截取日、周、设置。用内置 ImageGen 将三张基线截图作为参考，生成[概念图](docs/product/assets/ui-concept-v43-review.png)；采用其中的题材比例、预览优先、徽标独立行及设置层级，不采用图内示意数据或装饰。
+
+### 概念图提示词
+
+> Use case: ui-mockup. Create a high-fidelity, implementable design study for the recorded Dayfilm Windows app, anchored to these three actual renderer screenshots (day, week, settings). Output one wide comparison board: large 1280x820 day screenshot left, two smaller design crops on the right for week columns and settings. Keep all existing controls and true information; no invented feature, photography, illustration, new color theme, graphs or card grids. Dark flat charcoal editorial film editing desk, warm paper typography, restrained amber functional focus and current state, muted app-specific tints. Day: same topbar and three-column structure, narrower 64px film strip middle, right playback/today stats/recent list. Shrink huge 长镜头 to an editorial ~80px headline. Keep brief verdict. Move the existing current-window row and larger ~200px Notion scene still ahead of the existing previous episode, intermission and discoveries; show evidence after the preview as quiet but readable aligned rows. Give section headings and secondary copy more contrast. Week: fix collision by putting 换戏 badge in its own row below the title/metrics; align matrix and soften empty days. Settings: strengthen title, current nav indicator and keyboard-visible actions; aligned inputs and 添加 button; subtle red hover for 删除. Chinese interface, crisp vector-like typography, flat screenshot not a device mockup. No fake actionable elements.

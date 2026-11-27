@@ -99,12 +99,8 @@
               <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
             </div>
           </div>
-          <h2 class="hero__genre" id="genre" style="font-size: 128px">…</h2>
+          <h2 class="hero__genre" id="genre">…</h2>
           <p class="hero__verdict" id="verdict">…</p>
-          <p class="hero__episode" id="episode" role="button" tabindex="0" hidden></p>
-          <!-- v4 S6：当天最长一段中场休息，只读 -->
-          <p class="hero__intermission" id="intermission" hidden></p>
-          <section class="discoveries" id="discoveries" aria-label="剪辑发现" hidden></section>
 
           <div class="hero__band">
           <p class="hero__window">
@@ -149,6 +145,10 @@
             <span class="note__status" id="noteStatus" role="status" data-kind="idle"></span>
             <span class="note__count" id="noteCount">0/200</span>
           </div>
+
+          <p class="hero__episode" id="episode" role="button" tabindex="0" hidden></p>
+          <p class="hero__intermission" id="intermission" hidden></p>
+          <section class="discoveries" id="discoveries" aria-label="剪辑发现" hidden></section>
 
           <section class="onboarding" id="onboarding" hidden>
             <div class="onboarding__art">
@@ -324,7 +324,7 @@
         <div class="drawer__scrim" id="drawerScrim"></div>
         <aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
           <header class="panel__head">
-            <h2 id="panelTitle" style="font-size: 11px">设置</h2>
+            <h2 id="panelTitle">设置</h2>
             <button class="btn btn--quiet" id="panelClose" type="button">关闭</button>
           </header>
           <div class="panel__body">
