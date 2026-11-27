@@ -40,6 +40,9 @@ const earlierKey = iso(earlier)
 // 前一次出现的那一天：同一个标题，40 分钟。
 {
   const rows = []
+  for (let index = 0; index < 18; index += 1) {
+    hold(rows, at(earlier, 9, index * 2), 1, index % 2 === 0 ? 'Figma' : 'Slack', `Setup ${index}`)
+  }
   hold(rows, at(earlier, 14, 0), 40, 'Code', CODE)
   writeFileSync(join(userData, 'days', `${earlierKey}.jsonl`), rows.map((r) => JSON.stringify(r)).join('\n') + '\n')
 }
@@ -141,7 +144,10 @@ report.day = await evaluate(`(async () => {
     discoveryLabels: rows.map((r) => r.querySelector('.discovery__label')?.textContent),
     discoveryTexts: rows.map((r) => r.querySelector('.discovery__text')?.textContent),
     stats: [...document.querySelectorAll('#metrics .metric')].map((m) => m.textContent),
-    statCuts: document.querySelector('#statCuts').hidden ? null : document.querySelector('#statCutsValue').textContent,
+    statCuts: document.querySelector('#statCuts').hidden ? null : {
+      across: document.querySelector('#appCutCount').textContent,
+      within: document.querySelector('#withinAppCutCount').textContent
+    },
     genre: document.querySelector('#genre')?.textContent
   }
 })()`)
@@ -157,15 +163,34 @@ report.search = await evaluate(`(async () => {
     const reasons = [...document.querySelectorAll('.shot__reason')].map((n) => n.textContent)
     return { count: document.querySelectorAll('#list > li').length, reasons, empty: document.querySelector('#empty').hidden ? null : document.querySelector('#empty').textContent }
   }
+  document.querySelector('#modeWeek').click()
+  input.focus()
   const byWord = await run('dayfilm')
+  const fromWeek = {
+    returnedToDay: document.querySelector('#modeDay').getAttribute('aria-pressed') === 'true',
+    keptFocus: document.activeElement === input,
+    showedResultsHeading: document.querySelector('#listHeading').textContent === '搜索结果',
+    usedHistoricalHeading: document.querySelector('#statsHeading').textContent === '当日统计'
+  }
   const byDate = await run(${JSON.stringify(`${viewed.getMonth() + 1}月${viewed.getDate()}日`)})
   const expired = await run('2024-03-05')
   input.value = ''
   input.dispatchEvent(new Event('input', { bubbles: true }))
   await new Promise((r) => setTimeout(r, 600))
-  return { byWord, byDate, expired }
+  return { byWord, byDate, expired, fromWeek }
 })()`)
 report.searchShot = await shot('2-search')
+
+report.episodeNavigation = await evaluate(`(async () => {
+  document.querySelector('#episode').click()
+  await new Promise(resolve => setTimeout(resolve, 1200))
+  const list = document.querySelector('#listScroll')
+  const active = list.querySelector('.shot.is-active')
+  if (!active) return false
+  const viewport = list.getBoundingClientRect()
+  const row = active.getBoundingClientRect()
+  return list.scrollTop > 0 && row.top >= viewport.top && row.bottom <= viewport.bottom
+})()`)
 
 console.log(JSON.stringify(report, null, 2))
 ws.close()
@@ -176,4 +201,4 @@ try {
 } catch {
   // 目录被系统索引之类占着不影响验收，留着下次清理
 }
-process.exit(0)
+process.exit(report.search.byWord.count > 0 && report.episodeNavigation && Object.values(report.search.fromWeek).every(Boolean) ? 0 : 1)

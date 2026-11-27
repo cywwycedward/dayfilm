@@ -224,6 +224,25 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 累计：`npm run typecheck` exit=0，`npm test` 56 文件 / 732 例通过，`npm run build` 通过。
 探针：`node scripts/probe-v4.mjs`（独立 userData + 两天合成采样，不碰本机数据）。
 
+## v4.4 复盘工作台
+
+概念图：`docs/product/assets/ui-concept-v44-workspace.png`（日视图整屏）、`ui-concept-v44-components.png`（放映条 / 镜头行 / 设置）。
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 一屏放下 | 通过 | 960×640 下 `.hero__frame`、`#play`、`.rail__head`、`#modeWeek` 全在视口内（`firstViewport`），`main.scrollWidth ≤ clientWidth`（`noHorizontalOverflow`）；顶栏承接日/周切换，hero 不再放分段按钮 |
+| 剧照与元数据 | 通过 | 剧照卡显示 `第 NN 镜`、时段、应用、标题、项目与时长；底色取窗口色相 `--still-tint`，不再用 canvas 生成假剧照；标题与进程同名时只显示一次 |
+| 集成放映条 | 通过 | 舞台底部一条：放映按钮（`aria-label` 放映/暂停）、`00:00:00 / 24:00:00`、进度条与 60x/600x/3600x；`#play` 在首屏 |
+| 复盘线索 | 通过 | 「上一集」为常驻按钮行、「中场休息」为事实行、剪辑发现收进 `details`；960×640 下 `#episode`/`#intermission`/`#longestRest` 均在视口内（`persistentFacts`），两处明细默认收起（`detailsStartClosed`） |
+| 展开不压列表 | 通过 | 1280×820 与 960×640 同时展开「剪辑发现」「统计明细」后，`#listScroll` 底边 ≤ `#statsHeading` 顶边（`expandedStatsNoOverlap` 均 true）；原按面板高度算死行数的 `fitRecentList` 已删除，列表改由 flex 分配 |
+| 检索回合日视图 | 通过 | 周视图输入 `dayfilm`：命中 5 条、自动回日视图、输入框仍持有焦点、栏头为「搜索结果」、历史日期标题为「当日统计」（`fromWeek` 四项全 true）；`11月26日` 命中 7 条，`2024-03-05` 返回保留范围提示 |
+| 上一集跳转 | 通过 | 点「上一集」后列表滚到目标行并完全落在列表可视区内（`episodeNavigation` true） |
+| 设置焦点与内层 Esc | 通过 | 打开设置初始焦点在 `#panelClose`；内层下拉展开时第一次 Esc 只收起下拉、面板仍开；再按一次关闭并回到 `#settings`（`initial`/`selectConsumesEscape`/`returnsToSettings` 均 true） |
+| 空态与周切换 | 通过 | 无素材时 `#listScroll.hidden`、列头高度 0、空态文案仍显示（`emptyListCollapsed`）；周视图下点「日视图」能切回（`daySwitchFromWeek`） |
+
+累计：`npm run typecheck` exit=0，`npm test` 56 文件 / 732 例通过，`npm run build` 通过。
+探针：`npx electron scripts/probe-hierarchy.cjs`（两档窗口的布局与焦点断言）与 `node scripts/probe-v4.mjs`（检索与上一集跳转），两者 exit=0。未实测：取消原生保存对话框后的「已取消导出剧本」提示。
+
 ## 复现命令
 
 ```powershell
@@ -236,6 +255,7 @@ node scripts/probe-ui.mjs               # 历史日切换 + 检索
 node scripts/probe-recovery.mjs         # 采集自恢复、无孤儿进程
 node scripts/probe-metrics.mjs 60 --hidden
 node scripts/probe-v4.mjs                # v4 界面：上一集 / 中场休息 / 镜头之后 / 剪辑子计数 / 检索
+npx electron scripts/probe-hierarchy.cjs # 1280×820 与 960×640 的布局、展开与焦点断言
 node scripts/probe-packaged.mjs dist\win-unpacked\Dayfilm.exe
 node scripts/pack/verify.cjs dist\win-unpacked
 ```

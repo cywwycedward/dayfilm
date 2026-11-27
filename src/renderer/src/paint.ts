@@ -140,12 +140,6 @@ export function paintDensity(
 /** 竖向胶片脊柱（DESIGN §脊柱）：只画可见帧——剧照缩略 + 族色边 + 齿孔 + 密度柱 + 现在线。 */
 import type { SpineFrame } from './lib/spine'
 
-export interface SpinePaintOptions {
-  /** 剧照缩略要的日期与当天镜次 */
-  date: string
-  ordinals: ReadonlyMap<string, number>
-}
-
 export function paintSpine(
   ctx: CanvasRenderingContext2D,
   frames: readonly SpineFrame[],
@@ -155,20 +149,17 @@ export function paintSpine(
   spineWidth: number,
   width: number,
   height: number,
-  now: { y: number; label: string } | null,
-  options: SpinePaintOptions
+  now: { y: number; label: string } | null
 ): void {
-  // 胶片 60（含左右 2px 族色边）+ 齿孔 2 + 密度柱 24 = 88；标签画在 88 之外
-  const filmW = 60
+  // 胶片 44（含左右 2px 族色边）+ 齿孔 2 + 缝 2 + 密度柱 11 = 59，脊柱 64
+  const filmW = 44
   const sprocketX = filmW
   const sprocketW = 2
   const densityX = filmW + sprocketW + 2
-  const subW = 2
-  const subGap = 2
-  const densityEnd = Math.min(spineWidth, densityX + 6 * (subW + subGap))
+  const subW = 1
+  const subGap = 1
 
   ctx.clearRect(0, 0, width, height)
-  // 只给脊柱本身铺墨色；画布多出来的 96px 留给「现在」标签，保持透明
   ctx.fillStyle = '#0a0b0d'
   ctx.fillRect(0, 0, spineWidth, height)
 
@@ -180,37 +171,14 @@ export function paintSpine(
     const filled = frame.scene !== null && frame.hue !== null
 
     if (filled && frame.scene !== null && frame.hue !== null) {
-      // 左右各 2px 族色边 + 中间：8px 大写应用名 + 右侧镜号
+      // 左右各 2px 族色边 + 中间墨色块
       ctx.fillStyle = familyColor(frame.hue, 0.9)
       ctx.fillRect(0, y + 1, 2, frameH - 2)
       ctx.fillRect(filmW - 2, y + 1, 2, frameH - 2)
       ctx.fillStyle = 'rgba(236, 231, 220, 0.07)'
       ctx.fillRect(2, y + 1, filmW - 4, frameH - 2)
 
-      const ordinal = options.ordinals.get(frame.scene.id) ?? 0
-      const shot = ordinal > 0 ? `#${String(ordinal).padStart(2, '0')}` : ''
-      ctx.font = "400 8px 'Bebas', 'Plex Sans', sans-serif"
-      ctx.textAlign = 'right'
-      ctx.textBaseline = 'middle'
-      const shotW = shot.length > 0 ? ctx.measureText(shot).width : 0
-      if (shotW > 0) {
-        ctx.fillStyle = 'rgba(236, 231, 220, 0.55)'
-        ctx.fillText(shot, filmW - 5, y + frameH / 2)
-      }
-      const name = (frame.scene.exe || frame.scene.title).toUpperCase()
-      const maxName = filmW - 10 - shotW
-      if (name.length > 0 && maxName > 8) {
-        ctx.textAlign = 'left'
-        let text = name
-        if (ctx.measureText(text).width > maxName) {
-          while (text.length > 1 && ctx.measureText(`${text}…`).width > maxName) {
-            text = text.slice(0, -1)
-          }
-          text = `${text}…`
-        }
-        ctx.fillStyle = 'rgba(236, 231, 220, 0.9)'
-        ctx.fillText(text, 5, y + frameH / 2)
-      }
+      // 帧内不写字：6–7px 的应用名在 1x 下不可读，只留族色块 + 齿孔 + 密度
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
 
@@ -268,23 +236,21 @@ export function paintSpine(
     ctx.fillRect(0, y + frameH - 1, spineWidth, 1)
   }
 
-  // 现在：2px 琥珀横线（只跨脊柱）+ 右侧（密度柱之外 +6px）的标签
+  // 现在：2px 琥珀横线 + 时间码写在胶片内（不再溢出到右栏）
   if (now !== null) {
     const y = Math.round(now.y)
     if (y >= -1 && y <= height + 1) {
       ctx.fillStyle = 'rgba(232, 180, 90, 0.95)'
       ctx.fillRect(0, y, spineWidth, 2)
-      ctx.font = "400 10px 'Plex Mono', ui-monospace, monospace"
-      ctx.textAlign = 'left'
+      ctx.font = "400 9px 'Plex Mono', ui-monospace, monospace"
+      ctx.textAlign = 'right'
       ctx.textBaseline = 'middle'
       const textW = ctx.measureText(now.label).width
-      // 单独占 16px 车道：不压密度柱
-      const labelX = densityEnd + 16
-      // 40% 墨色底，避免与帧内应用名叠字
-      ctx.fillStyle = 'rgba(10, 11, 13, 0.4)'
-      ctx.fillRect(labelX - 3, y - 14, Math.min(textW + 6, width - labelX + 3), 13)
+      // 40% 墨色底，避开上方帧的族色块
+      ctx.fillStyle = 'rgba(10, 11, 13, 0.72)'
+      ctx.fillRect(filmW - textW - 6, y - 14, Math.min(textW + 6, filmW), 12)
       ctx.fillStyle = 'rgba(232, 180, 90, 0.95)'
-      ctx.fillText(now.label, labelX, y - 8)
+      ctx.fillText(now.label, filmW - 4, y - 8)
       ctx.textAlign = 'left'
       ctx.textBaseline = 'alphabetic'
     }

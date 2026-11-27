@@ -12,13 +12,18 @@
   <body>
     <div id="app">
       <header class="topbar" id="topbar">
-        <h1 class="brand" style="font-size: 20px">DAYFILM</h1>
+        <h1 class="brand">DAYFILM</h1>
+        <div class="mode" role="group" aria-label="视图模式">
+          <button class="mode__btn is-active" id="modeDay" type="button" aria-controls="main" aria-pressed="true">日视图</button>
+          <button class="mode__btn" id="modeWeek" type="button" aria-controls="weekFilm" aria-pressed="false">周视图</button>
+        </div>
         <div class="topbar__date" id="date"></div>
         <span class="chip" id="chip" data-state="ok"
           ><i class="chip__dot"></i><span id="chipText">实时记录中</span></span
         >
         <div class="topbar__drag" id="dragRegion" aria-hidden="true"></div>
         <label class="topbar__search">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" /><path d="m10.5 10.5 3 3" /></svg>
           <input
             id="search"
             type="search"
@@ -89,46 +94,24 @@
 
       <div class="main" id="main">
         <section class="hero" aria-label="今天">
-          <div class="hero__clapper" aria-hidden="true"></div>
-          <div class="hero__head">
-            <span class="hero__chip" id="shootingChip" data-state="idle"
-              ><b id="liveText">空闲中</b><em id="elapsed">00:00:00</em></span
-            >
-            <div class="mode" role="group" aria-label="视图模式">
-              <button class="mode__btn is-active" id="modeDay" type="button" aria-pressed="true">日</button>
-              <button class="mode__btn" id="modeWeek" type="button" aria-pressed="false">周</button>
-            </div>
+          <div class="hero__summary">
+            <h2 class="hero__genre" id="genre">…</h2>
+            <p class="hero__verdict" id="verdict">…</p>
           </div>
-          <h2 class="hero__genre" id="genre" style="font-size: 128px">…</h2>
-          <p class="hero__verdict" id="verdict">…</p>
-          <p class="hero__episode" id="episode" role="button" tabindex="0" hidden></p>
-          <!-- v4 S6：当天最长一段中场休息，只读 -->
-          <p class="hero__intermission" id="intermission" hidden></p>
-          <section class="discoveries" id="discoveries" aria-label="剪辑发现" hidden></section>
 
-          <p class="hero__window">
-            <span class="hero__window-label">当前窗口</span>
-            <strong id="liveExe">…</strong>
-            <span class="hero__window-title" id="liveTitle"></span>
-          </p>
-
-          <dl class="hero__metrics">
-            <div class="hero__metric">
-              <dt>当前镜头时长</dt>
-              <dd id="metricShot">…</dd>
-            </div>
-            <div class="hero__metric">
-              <dt>最长镜头</dt>
-              <dd id="metricLongest">…</dd>
-            </div>
-            <div class="hero__metric">
-              <dt>项目标签</dt>
-              <dd id="metricProject">…</dd>
-            </div>
-          </dl>
+          <section class="review-stage" aria-label="镜头预览与放映">
+          <div class="review-stage__header">
+            <h3>镜头预览</h3>
+            <span class="hero__chip" id="shootingChip" data-state="idle"
+              ><b id="liveText">空闲中</b><em id="elapsed">00:00:00</em></span>
+          </div>
 
           <figure class="hero__frame" id="heroFrame" data-kind="empty">
-            <div class="hero__frame-still" id="heroStill" role="img" aria-label="当前镜头剧照"></div>
+            <div class="hero__frame-still" id="heroStill">
+              <div class="hero__still-meta"><span id="stillNumber"></span><span id="stillTime"></span></div>
+              <div class="hero__still-copy"><span id="stillApp"></span><b id="stillTitle"></b></div>
+              <div class="hero__still-details"><span id="metricProject"></span><span id="metricShot"></span></div>
+            </div>
             <span class="hero__frame-tag" id="heroFrameTag" hidden>中场休息</span>
             <div class="hero__frame-empty" id="heroFrameEmpty" hidden>
               <b id="heroFrameEmptyTitle">空档</b>
@@ -136,17 +119,61 @@
             </div>
           </figure>
 
+          <div class="player">
+            <button class="player__play" id="play" type="button" aria-label="放映">
+              <svg class="player__icon player__icon--play" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4.5 2.5 13 8l-8.5 5.5z" />
+              </svg>
+              <svg class="player__icon player__icon--pause" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4.5 2.5h2.5v11H4.5zM9 2.5h2.5v11H9z" />
+              </svg>
+              <span class="player__label" aria-hidden="true">放映</span>
+            </button>
+            <div class="player__position">
+              <p class="player__clock">
+                <span id="timecode">00:00:00</span><span class="player__clock-dim"> / 24:00:00</span>
+              </p>
+              <input class="scrub" id="scrub" type="range" min="0" max="1439" step="1" value="0" aria-label="回放进度" />
+            </div>
+            <div class="speeds" role="group" aria-label="回放倍速">
+              <button class="speed" type="button" data-speed="60" aria-pressed="false">60x</button>
+              <button class="speed" type="button" data-speed="600" aria-pressed="false">600x</button>
+              <button class="speed" type="button" data-speed="3600" aria-pressed="false">3600x</button>
+            </div>
+          </div>
+          </section>
+
           <div class="hero__note">
             <textarea
               class="note__input"
               id="note"
               rows="1"
               maxlength="200"
+              aria-label="写一句今天的评语"
               placeholder="写一句今天的评语…"
             ></textarea>
             <span class="note__status" id="noteStatus" role="status" data-kind="idle"></span>
             <span class="note__count" id="noteCount">0/200</span>
           </div>
+
+          <section class="review-context" aria-label="复盘线索">
+            <button class="context-row context-row--action" id="episode" type="button" hidden>
+              <span class="context-row__label">上一集</span>
+              <span class="context-row__content">
+                <strong id="episodeTitle"></strong>
+                <span id="episodeTime"></span>
+              </span>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg>
+            </button>
+            <div class="context-row" id="intermission" hidden>
+              <span class="context-row__label">中场休息</span>
+              <span class="context-row__content" id="intermissionText"></span>
+            </div>
+            <details class="review-details review-details--evidence">
+              <summary>剪辑发现</summary>
+              <div class="review-details__body discoveries" id="discoveries" hidden></div>
+            </details>
+          </section>
 
           <section class="onboarding" id="onboarding" hidden>
             <div class="onboarding__art">
@@ -188,54 +215,9 @@
         </section>
 
         <aside class="rail">
-          <section class="rail__block">
-            <header class="rail__head">
-              <h2 style="font-size: 14px">放映</h2>
-            </header>
-            <div class="player">
-              <button class="player__play" id="play" type="button" aria-label="播放">▶</button>
-              <div class="speeds" role="group" aria-label="回放倍速">
-                <button class="speed" type="button" data-speed="60" aria-pressed="false">60x</button>
-                <button class="speed" type="button" data-speed="600" aria-pressed="false">600x</button>
-                <button class="speed" type="button" data-speed="3600" aria-pressed="false">3600x</button>
-              </div>
-            </div>
-            <p class="player__clock">
-              <span id="timecode">00:00:00</span><span class="player__clock-dim"> / 24:00:00</span>
-            </p>
-            <input
-              class="scrub"
-              id="scrub"
-              type="range"
-              min="0"
-              max="1439"
-              step="1"
-              value="0"
-              aria-label="回放进度"
-            />
-          </section>
-
-          <section class="rail__block">
-            <header class="rail__head">
-              <h2 style="font-size: 14px">今日统计</h2>
-            </header>
-            <dl class="stats" id="metrics"></dl>
-            <p class="stats__marks" id="statMarks"></p>
-            <p class="stats__line" id="statCuts" hidden>
-              <b id="statCutsValue">跨应用 — · 应用内 —</b>
-            </p>
-            <p class="stats__line">
-              <span>最长镜头</span><b id="longestShot">…</b>
-            </p>
-            <p class="stats__line">
-              <span>最长休息</span><b id="longestRest">…</b>
-            </p>
-            <p class="stats__line stats__line--project" id="projectTotals"></p>
-          </section>
-
           <section class="rail__block rail__block--grow">
             <header class="rail__head">
-              <h2 style="font-size: 14px">最近镜头</h2>
+              <h2 id="listHeading">最近镜头</h2>
               <span id="listCount"></span>
             </header>
             <div class="recent__cols" aria-hidden="true">
@@ -249,6 +231,30 @@
             </div>
             <p class="empty" id="empty" hidden>还没有拍摄任何素材</p>
           </section>
+          <section class="rail__block">
+            <header class="rail__head">
+              <h2 id="statsHeading">今日统计</h2>
+            </header>
+            <dl class="stats" id="metrics"></dl>
+            <dl class="review-facts">
+              <div><dt>最长休息</dt><dd id="longestRest">…</dd></div>
+            </dl>
+            <details class="review-details review-details--stats">
+              <summary>统计明细</summary>
+              <div class="review-details__body">
+                <dl class="review-facts" id="statMarks"></dl>
+                <dl class="review-facts" id="statCuts" hidden>
+                  <div><dt>跨应用剪辑</dt><dd id="appCutCount">—</dd></div>
+                  <div><dt>应用内剪辑</dt><dd id="withinAppCutCount">—</dd></div>
+                </dl>
+                <div class="review-projects" id="projectTotals" hidden>
+                  <h3>项目用时</h3>
+                  <dl class="review-facts" id="projectTimes"></dl>
+                  <p id="projectTimesEmpty" hidden>没有匹配到项目</p>
+                </div>
+              </div>
+            </details>
+          </section>
         </aside>
       </div>
 
@@ -260,8 +266,6 @@
           <button class="btn" id="weekToday" type="button">本周</button>
         </div>
         <div class="week-film__scroll">
-          <section class="arcs" id="weekArcs" aria-label="七日叙事弧"></section>
-          <section class="story" id="storyline" aria-label="故事线"></section>
           <section class="week-verdict" aria-label="周导演评语">
             <p class="week-verdict__sentence" id="weekVerdict">…</p>
             <details class="week-evidence" id="weekEvidence">
@@ -269,7 +273,18 @@
               <div class="week-evidence__body" id="weekEvidenceBody"></div>
             </details>
           </section>
-          <section class="week-picks" id="weekPicks" aria-label="本周精选"></section>
+          <section class="week-section" aria-labelledby="weekDaysTitle">
+            <h2 id="weekDaysTitle">每日回顾</h2>
+            <div class="arcs" id="weekArcs"></div>
+          </section>
+          <section class="week-section" aria-labelledby="weekStoryTitle">
+            <h2 id="weekStoryTitle">项目分布</h2>
+            <div class="story" id="storyline"></div>
+          </section>
+          <section class="week-section" aria-labelledby="weekPicksTitle">
+            <h2 id="weekPicksTitle">本周精选</h2>
+            <div class="week-picks" id="weekPicks"></div>
+          </section>
         </div>
       </section>
 
@@ -315,7 +330,7 @@
         <div class="drawer__scrim" id="drawerScrim"></div>
         <aside class="panel" id="panel" role="dialog" aria-modal="true" aria-labelledby="panelTitle">
           <header class="panel__head">
-            <h2 id="panelTitle" style="font-size: 11px">设置</h2>
+            <h2 id="panelTitle">设置</h2>
             <button class="btn btn--quiet" id="panelClose" type="button">关闭</button>
           </header>
           <div class="panel__body">
@@ -349,8 +364,8 @@
               <section class="pane" data-pane="projects" hidden>
                 <div class="ptable" id="projectCards"></div>
                 <form class="inline-form" id="projectForm">
-                  <input id="projectName" type="text" placeholder="项目名" autocomplete="off" />
-                  <input id="projectTerms" type="text" placeholder="关键词，逗号分隔" autocomplete="off" />
+                  <label>项目名<input id="projectName" type="text" autocomplete="off" /></label>
+                  <label>关键词（逗号分隔）<input id="projectTerms" type="text" autocomplete="off" /></label>
                   <button class="btn btn--primary" type="submit">添加</button>
                 </form>
                 <div class="row-actions">
