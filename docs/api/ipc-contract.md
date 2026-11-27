@@ -11,7 +11,8 @@
 | `dayfilm:get-day` | `date?: string` | `DayRollup` | 取指定日期（默认当天）的胶片与汇总 |
 | `dayfilm:list-days` | 无 | `string[]` | 保留期内且有数据的日期，倒序 |
 | `dayfilm:live` | 无 | `LiveState` | 当前实时状态快照 |
-| `dayfilm:search` | `query: string` | `Scene[]` | 标题与进程名子串匹配，跨最近 7 天，按开始时间倒序，最多 200 条 |
+| `dayfilm:search` | `query: string` | `SearchOutcome`（`{ hits, coverage, retainedFrom }`） | 多词 AND + 时间词；先按目标日期与保留范围求交，再检索，最多 200 条 |
+| `dayfilm:previous-episode` | `date: string` | `EpisodeRef \| null` | 该日最长镜头的窗口上一次出现在哪一天（只看更早的保留日期） |
 | `dayfilm:export-screenplay` | `date: string` | `ScreenplayExport`（`{ path }`） | 导出 Markdown 剧本，取消返回空路径 |
 | `dayfilm:get-settings` | 无 | `Settings` | 读取用户设置 |
 | `dayfilm:set-settings` | `Partial<Settings>` | `Settings` | 提交部分字段，返回落盘后的完整设置 |
@@ -21,6 +22,9 @@
 | `dayfilm:export-edl` | `date: string` | `{ path }` | 导出 CMX3600 EDL（24fps），取消返回空路径 |
 | `dayfilm:export-pdf` | `date: string` | `{ path }` | 导出剧本 PDF，取消返回空路径 |
 | `dayfilm:set-mark` | `date: string`, `startMs: number`, `mark: SceneMark \| null` | `DayRollup` | 标正片 / 花絮 / 清除，返回重算后的当日汇总 |
+| `dayfilm:suggest-stories` | 无 | `StorySuggestions` | 从最近 30 天的标题里找故事线候选（纯规则，不发网络请求） |
+| `dayfilm:ai-stories` | 无 | `StorySuggestions` | 用户点按钮时让模型补充候选；失败时仍返回确定性候选，`failure` 说明原因 |
+| `dayfilm:ai-probe` | 无 | `{ ok, detail }` | 验证模型通道的基址、key 与模型名 |
 | `dayfilm:set-hud` | `visible: boolean` | `{ visible: boolean }` | 显示/隐藏导演 HUD，返回切换后的状态 |
 | `dayfilm:quit` | 无 | 无 | 停止采集并退出应用 |
 
@@ -68,7 +72,8 @@ HUD 页面同样拿到完整的 `window.dayfilm`，但它只用 `live` / `onTick
 - 返回对象必须是可结构化克隆的纯数据，不含函数、类实例或循环引用。
 - 主进程对入参做类型与范围校验：非法日期返回空汇总或空路径，非字符串查询返回空数组，非法标记抛可读错误；除 `set-mark` 的显式错误外不抛异常、不崩溃。
 - `dayfilm:get-day` 省略日期时取当天；非法日期返回空汇总，但 `date` 字段回填请求的那个日期。
-- `dayfilm:search` 只检索今天加保留期内日期，合并后按开始时间倒序截断到 200 条。
+- `dayfilm:search` 只检索“时间词点名的日期”与保留范围的交集；没有时间词时取最近 7 天。查询先归一化（全角折半角、去后缀与脏标记），多词时要求全部命中（`title` 或 `exe`），排序先按标题命中词数，再按开始时刻倒序，截断到 200 条。返回值里的 `reason` 与匹配同一趟算出（命中的词与日期），`coverage` 区分 `full` / `partial` / `expired`，`retainedFrom` 是保留范围内最早的一天。
+- 模型通道是主进程唯一的网络出口：默认关闭，启动、采样、翻日与渲染路径上没有任何请求；只有 `dayfilm:ai-stories` / `dayfilm:ai-probe` 会访问 `ai.baseUrl`（超时 20 秒，失败只降级为确定性候选）。
 - 四种导出都由主进程弹保存对话框，强制扩展名（`.md` / `.edl` / `.pdf` / `.png`），用户取消返回 `{ path: '' }`。
-- `dayfilm:set-settings` 只处理白名单字段：`retentionDays` 取 0/7/30/90/365；`redactTerms` trim、去空、去重、单条 ≤64 字符、最多 100 条；`projects` 名称 ≤32 字、最多 20 条、每条关键词 ≤20 个；`autoExtraUnderSec` 取 0/3/10/30；`sound.mode` 取 `projector` / `cuts`，`sound.volume` 夹到 0–1；`hud.visible` 按 `Boolean()` 归一，`hud.x` / `hud.y` 只收有限数。非法值回落到当前值。
+- `dayfilm:set-settings` 只处理白名单字段：`retentionDays` 取 0/7/30/90/365；`redactTerms` trim、去空、去重、单条 ≤64 字符、最多 100 条；`projects` 名称 ≤32 字、最多 20 条、每条关键词 ≤20 个；`autoExtraUnderSec` 取 0/3/10/30；`sound.mode` 取 `projector` / `cuts`，`sound.volume` 夹到 0–1；`hud.visible` 按 `Boolean()` 归一，`hud.x` / `hud.y` 只收有限数；`ai.baseUrl` 必须是 `http(s)` 绝对地址（空串表示未配置），`ai.model` ≤64，`ai.apiKey` ≤256 且去控制字符（空串表示清除；界面里留空提交表示保留旧 key，只有“清除 key”按钮才发空串）。非法值回落到当前值。
 - 主进程只接受来自本应用窗口、本应用页面的调用（开发模式的 devserver 地址，或本地 `index.html`）；其余来源直接拒绝，只记通道名。

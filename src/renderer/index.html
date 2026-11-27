@@ -91,7 +91,6 @@
         <section class="hero" aria-label="今天">
           <div class="hero__clapper" aria-hidden="true"></div>
           <div class="hero__head">
-            <p class="hero__kicker">今天像什么</p>
             <span class="hero__chip" id="shootingChip" data-state="idle"
               ><b id="liveText">空闲中</b><em id="elapsed">00:00:00</em></span
             >
@@ -102,6 +101,10 @@
           </div>
           <h2 class="hero__genre" id="genre" style="font-size: 128px">…</h2>
           <p class="hero__verdict" id="verdict">…</p>
+          <p class="hero__episode" id="episode" role="button" tabindex="0" hidden></p>
+          <!-- v4 S6：当天最长一段中场休息，只读 -->
+          <p class="hero__intermission" id="intermission" hidden></p>
+          <section class="discoveries" id="discoveries" aria-label="剪辑发现" hidden></section>
 
           <p class="hero__window">
             <span class="hero__window-label">当前窗口</span>
@@ -188,7 +191,6 @@
           <section class="rail__block">
             <header class="rail__head">
               <h2 style="font-size: 14px">放映</h2>
-              <span>回放今天的工作与生活</span>
             </header>
             <div class="player">
               <button class="player__play" id="play" type="button" aria-label="播放">▶</button>
@@ -216,10 +218,12 @@
           <section class="rail__block">
             <header class="rail__head">
               <h2 style="font-size: 14px">今日统计</h2>
-              <span>工作镜头的剪辑摘要</span>
             </header>
             <dl class="stats" id="metrics"></dl>
             <p class="stats__marks" id="statMarks"></p>
+            <p class="stats__line" id="statCuts" hidden>
+              <b id="statCutsValue">跨应用 — · 应用内 —</b>
+            </p>
             <p class="stats__line">
               <span>最长镜头</span><b id="longestShot">…</b>
             </p>
@@ -237,6 +241,7 @@
             <div class="recent__cols" aria-hidden="true">
               <span>时间码</span><span>镜头标题</span><span>进程</span><span>时长</span>
             </div>
+            <p class="empty" id="searchNote" hidden>部分日期已超出保留范围，仅检索仍保留的记录</p>
             <div class="recent" id="listScroll">
               <div class="recent__spacer" id="listSpacer">
                 <ol class="recent__list" id="list"></ol>
@@ -314,68 +319,99 @@
             <button class="btn btn--quiet" id="panelClose" type="button">关闭</button>
           </header>
           <div class="panel__body">
-            <section class="fieldset">
-              <h3>保留期</h3>
-              <div class="fieldset__select" id="settingRetention"></div>
-              <p class="hint">启动时清理超出保留期的日文件，界面的日期列表只列出保留期内的日期。</p>
-            </section>
+            <nav class="panel__nav" id="settingsNav" aria-label="设置分区">
+              <button class="nav-item" type="button" data-section="collect">采集</button>
+              <button class="nav-item" type="button" data-section="projects" aria-label="项目">项目<span class="nav-item__count" id="navCountProjects" aria-hidden="true"></span></button>
+              <button class="nav-item" type="button" data-section="model">模型</button>
+              <button class="nav-item" type="button" data-section="resident">常驻</button>
+              <button class="nav-item" type="button" data-section="system">系统</button>
+            </nav>
 
-            <section class="fieldset">
-              <h3>脱敏关键词</h3>
-              <div class="terms" id="termChips"></div>
-              <form class="term-form" id="termForm">
-                <input id="termInput" type="text" placeholder="输入关键词后回车" autocomplete="off" />
-                <button class="btn" type="submit">添加</button>
-              </form>
-              <p class="hint">命中后标题显示为 [已隐藏]，只影响之后的新记录。</p>
-              <p class="hint hint--mono">内置规则（不可编辑）：<span id="builtinTerms"></span></p>
-            </section>
+            <div class="panel__pane" id="settingsPane">
+              <section class="pane" data-pane="collect">
+                <div class="kv kv--tight">
+                  <span class="kv__label">保留期</span>
+                  <div class="fieldset__select" id="settingRetention"></div>
+                </div>
+                <div class="pane__block">
+                  <div class="terms" id="termChips"></div>
+                  <form class="inline-form" id="termForm">
+                    <input id="termInput" type="text" placeholder="脱敏关键词" autocomplete="off" />
+                    <button class="btn btn--primary" type="submit">添加</button>
+                  </form>
+                  <details class="disclosure">
+                    <summary><span id="builtinCount">12</span> 条内置规则</summary>
+                    <p class="disclosure__body" id="builtinTerms"></p>
+                  </details>
+                </div>
+              </section>
 
-            <section class="fieldset">
-              <h3>项目</h3>
-              <div class="projects" id="projectCards"></div>
-              <form class="project-form" id="projectForm">
-                <input id="projectName" type="text" placeholder="项目名" autocomplete="off" />
-                <input id="projectTerms" type="text" placeholder="关键词，用逗号分隔" autocomplete="off" />
-                <button class="btn" type="submit">添加</button>
-              </form>
-              <p class="hint">镜头标题或进程名包含任一关键词就归入该项目，按规则顺序取第一条命中。</p>
-            </section>
+              <section class="pane" data-pane="projects" hidden>
+                <div class="ptable" id="projectCards"></div>
+                <form class="inline-form" id="projectForm">
+                  <input id="projectName" type="text" placeholder="项目名" autocomplete="off" />
+                  <input id="projectTerms" type="text" placeholder="关键词，逗号分隔" autocomplete="off" />
+                  <button class="btn btn--primary" type="submit">添加</button>
+                </form>
+                <div class="row-actions">
+                  <button class="btn btn--outline" id="findCandidates" type="button">找候选</button>
+                </div>
+                <div class="candidates" id="candidateList"></div>
+                <p class="note-line" id="candidateHint" role="status" hidden></p>
+              </section>
 
-            <section class="fieldset">
-              <h3>常驻</h3>
-              <label class="switch"><input type="checkbox" id="settingAutoStart" /><span>开机自启</span></label>
-              <label class="switch"><input type="checkbox" id="settingPaused" /><span>暂停采样</span></label>
-              <label class="switch"><input type="checkbox" id="settingHud" /><span>导演 HUD</span></label>
-              <div class="sound-row">
-                <span class="field__label">自动花絮</span>
-                <div id="settingAutoExtra"></div>
-              </div>
-              <p class="hint">暂停与托盘菜单里的“暂停采样”是同一个开关；自动花絮会把短于阈值的镜头默认计为花絮。</p>
-            </section>
+              <section class="pane" data-pane="model" hidden>
+                <label class="switch"><input type="checkbox" id="aiEnabled" /><span>启用</span></label>
+                <div class="kv">
+                  <label class="kv__label" for="aiBaseUrl">接口</label>
+                  <input class="kv__input" id="aiBaseUrl" type="text" placeholder="https://api.openai.com/v1" autocomplete="off" spellcheck="false" />
+                  <label class="kv__label" for="aiModel">模型</label>
+                  <input class="kv__input" id="aiModel" type="text" placeholder="gpt-4o-mini" autocomplete="off" spellcheck="false" />
+                  <label class="kv__label" for="aiKey">key</label>
+                  <input class="kv__input" id="aiKey" type="password" placeholder="本地服务可留空" autocomplete="off" />
+                </div>
+                <div class="row-actions">
+                  <button class="btn btn--primary" id="aiSave" type="button">保存</button>
+                  <button class="btn btn--outline" id="aiProbe" type="button">测试连接</button>
+                  <button class="btn btn--danger" id="aiKeyClear" type="button">清除 key</button>
+                </div>
+                <div class="pane__block">
+                  <button class="btn btn--outline" id="aiCandidates" type="button">用模型补充候选</button>
+                  <p class="note-line" id="aiStatus" role="status"></p>
+                  <p class="note-line note-line--warn">标题摘要会发往该接口</p>
+                </div>
+              </section>
 
-            <section class="fieldset">
-              <h3>放映音效</h3>
-              <div class="sound-modes" role="group" aria-label="放映音效模式">
-                <button class="sound-mode is-active" id="soundModeProjector" type="button" aria-pressed="true">放映机 + 剪辑</button>
-                <button class="sound-mode" id="soundModeCuts" type="button" aria-pressed="false">仅剪辑</button>
-              </div>
-              <div class="sound-volume">
-                <span class="field__label">音量</span>
-                <input id="soundVolume" type="range" min="0" max="100" step="5" value="35" aria-label="放映音效音量" />
-                <span class="sound-volume__value" id="soundVolumeValue">35</span>
-              </div>
-            </section>
+              <section class="pane" data-pane="resident" hidden>
+                <div class="switch-stack">
+                  <label class="switch"><input type="checkbox" id="settingAutoStart" /><span>开机自启</span></label>
+                  <label class="switch"><input type="checkbox" id="settingPaused" /><span>暂停采样</span></label>
+                  <label class="switch"><input type="checkbox" id="settingHud" /><span>导演 HUD</span></label>
+                </div>
+                <div class="kv kv--tight">
+                  <span class="kv__label">自动花絮</span>
+                  <div id="settingAutoExtra"></div>
+                </div>
+              </section>
 
-            <section class="fieldset">
-              <h3>数据位置</h3>
-              <code class="path">%APPDATA%\dayfilm\days\</code>
-              <p class="hint">关闭窗口会收到托盘继续采样；要彻底停止请用下面的按钮。</p>
-              <button class="btn btn--danger" id="quitBtn" type="button">退出 Dayfilm</button>
-            </section>
-
-            <p class="panel__status" id="panelStatus" role="status" data-kind="idle"></p>
+              <section class="pane" data-pane="system" hidden>
+                <div class="sound-modes" role="group" aria-label="放映音效模式">
+                  <button class="sound-mode is-active" id="soundModeProjector" type="button" aria-pressed="true">放映机 + 剪辑</button>
+                  <button class="sound-mode" id="soundModeCuts" type="button" aria-pressed="false">仅剪辑</button>
+                </div>
+                <div class="sound-volume">
+                  <span class="field__label">音量</span>
+                  <input id="soundVolume" type="range" min="0" max="100" step="5" value="35" aria-label="放映音效音量" />
+                  <span class="sound-volume__value" id="soundVolumeValue">35</span>
+                </div>
+                <div class="pane__block">
+                  <code class="path">%APPDATA%\dayfilm\days\</code>
+                  <button class="btn btn--danger" id="quitBtn" type="button" title="关闭窗口只是收进托盘；退出会停止采样">退出 Dayfilm</button>
+                </div>
+              </section>
+            </div>
           </div>
+          <p class="panel__status" id="panelStatus" role="status" data-kind="idle"></p>
         </aside>
       </div>
 

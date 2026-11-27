@@ -74,6 +74,11 @@ describe('HUD 状态', () => {
   test('采集出错优先于一切', () => {
     expect(hudMood(live(null, { paused: true, captureError: '采样子进程已退出' }))).toBe('error')
   })
+
+  test('away（无前台窗口）不是错误，走空闲', () => {
+    const state = live(null, { captureError: null, day: day([rest('away', 890, 5)]) })
+    expect(hudMood(state)).toBe('idle')
+  })
 })
 
 describe('秒表', () => {

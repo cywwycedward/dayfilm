@@ -54,13 +54,15 @@
   "projects": [{ "name": "Dayfilm", "terms": ["dayfilm"] }],
   "hud": { "visible": true, "x": 1536, "y": 24 },
   "autoExtraUnderSec": 0,
-  "sound": { "mode": "projector", "volume": 0.35 }
+  "sound": { "mode": "projector", "volume": 0.35 },
+  "ai": { "enabled": false, "baseUrl": "", "model": "", "apiKey": "" }
 }
 ```
 
 - 文件缺失或损坏时使用 `DEFAULT_SETTINGS`，并把修复后的结果写回。
 - 单字段类型或不合法取默认值（或上一份合法值）；损坏的原文件先复制成 `settings.corrupt-<时间戳>.json`。
 - 读取时剥掉 UTF-8 BOM：PowerShell 5.1 的 `Set-Content -Encoding utf8` 会带 BOM。
+- `ai` 是模型通道：`baseUrl` 只接受 `http(s)` 绝对地址（空串表示未配置），`model` ≤64 字符，`apiKey` ≤256 字符且去控制字符。**`apiKey` 以明文保存**（与 coding agent 的配置文件同一口径），界面只显示“已设置 / 未设置”。
 - 写入采用"写临时文件 + 重命名"，避免半截文件；内容按当前定义重建，因此多出来的字段不会保留。
 
 ## 手记文件

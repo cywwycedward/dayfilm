@@ -1,6 +1,6 @@
 {
   "name": "dayfilm",
-  "version": "2.6.0",
+  "version": "4.0.0",
   "private": true,
   "description": "Dayfilm - 把一天剪成一部电影",
   "author": "Dayfilm",
@@ -20,6 +20,8 @@
     "electron": "^33.3.1",
     "electron-builder": "^26.18.0",
     "electron-vite": "^2.3.0",
+    "jsdom": "^29.1.1",
+    "openai": "^7.62.0",
     "typescript": "^5.7.2",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"

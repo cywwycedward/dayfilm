@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { ensureMarkdownPath } from '../../src/main/export'
 import { createIngest } from '../../src/main/ingest'
 import { NotesStore } from '../../src/main/notes'
-import { buildDayRollup, renderScreenplay } from '../../src/main/reel'
+import { buildDayRollup, liveScene, renderScreenplay } from '../../src/main/reel'
 import { DayCache } from '../../src/main/reel/cache'
 import { cleanupExpired } from '../../src/main/retention'
 import { SettingsStore } from '../../src/main/settings'
@@ -80,6 +80,11 @@ describe('整链集成', () => {
     expect(rollup).toEqual(buildDayRollup(store.readDay(DATE), DATE, T0 + 8000))
     expect(rollup.scenes.map((scene) => scene.exe)).toEqual(['Code', 'Chrome'])
     expect(rollup.cuts).toBe(1)
+    expect(rollup.appCuts).toBe(1)
+    expect(rollup.withinAppCuts).toBe(0)
+    expect(rollup.cuts).toBe((rollup.appCuts ?? 0) + (rollup.withinAppCuts ?? 0))
+    // 实时镜头与最终 rollup 的尾部镜头是同一个 id、同一段时间
+    expect(liveScene(cache.samples(DATE), rollup, DATE, T0 + 8000)).toEqual(rollup.scenes.at(-1))
 
     const screenplay = renderScreenplay(rollup)
     expect(screenplay).toContain(`# ${DATE} · Dayfilm 剧本`)
@@ -98,6 +103,25 @@ describe('整链集成', () => {
     expect(store.listDays()).toEqual([DATE])
     // 保留期内的数据不会被清理
     expect(cleanupExpired(store, 7, T0 + 8000)).toEqual({ removed: [], errors: [] })
+  })
+
+  it('away 采样进中场休息：实时镜头为空，计数不变', () => {
+    const samples = [
+      raw(T0, 'Code', 'dayfilm'),
+      raw(T0 + 2000, 'Code', 'dayfilm'),
+      raw(T0 + 4000, 'Code', 'dayfilm'),
+      raw(T0 + 6000, 'Code', 'dayfilm'),
+      raw(T0 + 8000, '', ''),
+      raw(T0 + 10_000, '', '')
+    ]
+    const now = T0 + 12_000
+    const rollup = buildDayRollup(samples, DATE, now)
+
+    expect(rollup.scenes.map((scene) => scene.kind)).toEqual(['shot', 'intermission'])
+    expect(rollup.activeMs).toBe(8000)
+    expect(rollup.idleMs).toBe(2000)
+    expect(rollup.cuts).toBe((rollup.appCuts ?? 0) + (rollup.withinAppCuts ?? 0))
+    expect(liveScene(samples, rollup, DATE, now)).toBeNull()
   })
 
   it('坏行与半行不影响整天读取', () => {

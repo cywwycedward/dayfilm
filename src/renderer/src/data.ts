@@ -3,8 +3,10 @@
  * 这样界面可以脱离主进程独立开发和演示。
  */
 import type { DayfilmApi } from '../../shared/ipc'
+import { matchProject } from '../../shared/projects'
 import { DEFAULT_SETTINGS, type Settings } from '../../shared/settings'
-import type { DayRollup, LiveState, Scene, SceneMark } from '../../shared/types'
+import { storyCandidates, type StorySuggestions } from '../../shared/stories'
+import type { DayRollup, EpisodeRef, LiveState, SceneMark, SearchHit, SearchOutcome } from '../../shared/types'
 import { buildMockDay, buildMockLive, mockDates } from './mock'
 import { fmtClock, fmtDuration, isoDate, startOfDay } from './lib/time'
 import { formatEdl } from './lib/edl'
@@ -15,7 +17,9 @@ export interface DayfilmSource {
   listDays(): Promise<string[]>
   getDay(date: string): Promise<DayRollup>
   live(): Promise<LiveState>
-  search(query: string): Promise<Scene[]>
+  search(query: string): Promise<SearchOutcome>
+  /** 所查看日期的锚点上一次出现的镜头；没有命中返回 null。 */
+  previousEpisode(date: string): Promise<EpisodeRef | null>
   /** 返回供提示语展示的路径或说明。 */
   exportScreenplay(date: string): Promise<string>
   getSettings(): Promise<Settings>
@@ -34,6 +38,12 @@ export interface DayfilmSource {
   exportPdf(date: string): Promise<{ path: string }>
   /** 显隐导演 HUD；返回切换后的状态。 */
   setHud(visible: boolean): Promise<boolean>
+  /** 故事线候选（纯规则）。 */
+  suggestStories(): Promise<StorySuggestions>
+  /** 用户点按钮时让模型补充候选。 */
+  aiStories(): Promise<StorySuggestions>
+  /** 设置页的“测试连接”。 */
+  aiProbe(): Promise<{ ok: boolean; detail: string }>
   /** 真正退出应用。 */
   quit(): Promise<void>
   onTick(cb: (state: LiveState) => void): () => void
@@ -56,6 +66,7 @@ function liveSource(api: DayfilmApi): DayfilmSource {
     getDay: (date) => api.getDay(date),
     live: () => api.live(),
     search: (query) => api.search(query),
+    previousEpisode: (date) => exposed.previousEpisode?.(date) ?? missing('previousEpisode'),
     exportScreenplay: async (date) => (await api.exportScreenplay(date)).path,
     getSettings: () => exposed.getSettings?.() ?? missing('getSettings'),
     setSettings: (patch) => exposed.setSettings?.(patch) ?? missing('setSettings'),
@@ -67,6 +78,9 @@ function liveSource(api: DayfilmApi): DayfilmSource {
     setMark: (date, startMs, mark) => exposed.setMark?.(date, startMs, mark) ?? missing('setMark'),
     exportPdf: (date) => exposed.exportPdf?.(date) ?? missing('exportPdf'),
     setHud: async (visible) => (await (exposed.setHud?.(visible) ?? missing('setHud'))).visible,
+    suggestStories: () => exposed.suggestStories?.() ?? missing('suggestStories'),
+    aiStories: () => exposed.aiStories?.() ?? missing('aiStories'),
+    aiProbe: () => exposed.aiProbe?.() ?? missing('aiProbe'),
     quit: () => exposed.quit?.() ?? missing('quit'),
     onTick: (cb) => api.onTick(cb)
   }
@@ -174,27 +188,65 @@ function mockSource(): DayfilmSource {
     hud: { ...value.hud }
   })
 
+  /** 演示用的上一集：口径与主进程一致（原始标题相同 / 同一项目），逐日向前找。 */
+  const previousEpisodeFor = (date: string): EpisodeRef | null => {
+    const anchor = dayFor(date).longestShot
+    if (anchor === null) return null
+    const project = matchProject(anchor, settings.projects)
+    const earlier = mockDates(Date.now())
+      .filter((item) => item < date)
+      .reverse()
+    for (const candidate of earlier) {
+      const matches = dayFor(candidate).scenes.filter(
+        (scene) =>
+          scene.kind === 'shot' &&
+          ((anchor.title.length > 0 && scene.title === anchor.title) ||
+            (project !== null && matchProject(scene, settings.projects) === project))
+      )
+      const hit = matches[matches.length - 1]
+      if (hit) {
+        return {
+          date: candidate,
+          start: hit.start,
+          exe: hit.exe,
+          title: hit.title,
+          seconds: hit.seconds,
+          match: hit.title === anchor.title ? 'title' : 'project',
+          project: matchProject(hit, settings.projects)
+        }
+      }
+    }
+    return null
+  }
+
   return {
     mode: 'mock',
     listDays: async () => mockDates(Date.now()),
     getDay: async (date) => dayFor(date),
     live: async () => liveNow(),
+    previousEpisode: async (date) => previousEpisodeFor(date),
     search: async (query) => {
       const needle = query.trim().toLowerCase()
-      if (needle.length === 0) return []
-      const hits: Scene[] = []
-      for (const date of mockDates(Date.now())) {
-        for (const scene of dayFor(date).scenes) {
-          if (scene.kind !== 'shot') continue
-          if (
-            scene.title.toLowerCase().includes(needle) ||
-            scene.exe.toLowerCase().includes(needle)
-          ) {
-            hits.push(scene)
+      const dates = mockDates(Date.now())
+      const hits: SearchHit[] = []
+      if (needle.length > 0) {
+        for (const date of dates) {
+          for (const scene of dayFor(date).scenes) {
+            if (scene.kind !== 'shot') continue
+            if (
+              scene.title.toLowerCase().includes(needle) ||
+              scene.exe.toLowerCase().includes(needle)
+            ) {
+              hits.push({ scene, reason: { tokens: [needle], dates: [] } })
+            }
           }
         }
       }
-      return hits.sort((a, b) => b.start - a.start).slice(0, 200)
+      return {
+        hits: hits.sort((a, b) => b.scene.start - a.scene.start).slice(0, 200),
+        coverage: 'full',
+        retainedFrom: dates[0] ?? null
+      }
     },
     exportScreenplay: async (date) => {
       const name = `dayfilm-${date}.md`
@@ -255,6 +307,16 @@ function mockSource(): DayfilmSource {
       settings = clone({ ...settings, hud: { ...settings.hud, visible } })
       return visible
     },
+    suggestStories: async () => ({
+      candidates: storyCandidates(mockDates(Date.now()).slice(0, 30).map(dayFor), settings.projects),
+      failure: null
+    }),
+    // 演示环境没有模型通道：保留规则候选，“未配置”是可展示的失败说明
+    aiStories: async () => ({
+      candidates: storyCandidates(mockDates(Date.now()).slice(0, 30).map(dayFor), settings.projects),
+      failure: { kind: 'not-configured', detail: '演示环境不支持模型' }
+    }),
+    aiProbe: async () => ({ ok: false, detail: '演示环境不支持模型' }),
     setMark: async (date, startMs, mark) => {
       const key = `${date}|${startMs}`
       if (mark === null) {

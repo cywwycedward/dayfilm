@@ -90,6 +90,9 @@ function rollup(dateISO: string, scenes: Scene[]): DayRollup {
   let featureMs = 0
   let extraMs = 0
   let cuts = 0
+  let appCuts = 0
+  let withinAppCuts = 0
+  let previousScene: Scene | null = null
   let previous: SceneKind | null = null
   let longest: Scene | null = null
   const byExe = new Map<string, number>()
@@ -99,6 +102,11 @@ function rollup(dateISO: string, scenes: Scene[]): DayRollup {
       if (scene.mark === 'extra') extraMs += scene.seconds * 1000
       else featureMs += scene.seconds * 1000
       if (previous === 'shot') cuts += 1
+      if (previousScene !== null) {
+        if (previousScene.exe !== scene.exe) appCuts += 1
+        else if (previousScene.title !== scene.title) withinAppCuts += 1
+      }
+      previousScene = scene
       byExe.set(scene.exe, (byExe.get(scene.exe) ?? 0) + scene.seconds)
       if (!longest || scene.seconds > longest.seconds) longest = scene
     } else {
@@ -120,6 +128,8 @@ function rollup(dateISO: string, scenes: Scene[]): DayRollup {
     idleMs,
     scenes,
     cuts,
+    appCuts,
+    withinAppCuts,
     longestShot: longest,
     topApps,
     verdict: verdictFor(cuts, activeMs, longest)

@@ -84,6 +84,35 @@ describe('DayAggregator 与全量结果一致', () => {
     }
   })
 
+  it('剪辑子计数在全量与增量里相同，且和等于 cuts', () => {
+    const samples: Sample[] = [
+      { t: T0, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 2000, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 4000, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 6000, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 8000, exe: 'Code', title: 'test.ts', idleMs: 0 },
+      { t: T0 + 10_000, exe: 'Code', title: 'test.ts', idleMs: 0 },
+      { t: T0 + 12_000, exe: 'Slack', title: 'inbox', idleMs: 0 },
+      { t: T0 + 14_000, exe: 'Slack', title: 'inbox', idleMs: 0 },
+      { t: T0 + 16_000, exe: 'Slack', title: 'inbox', idleMs: 0 },
+      { t: T0 + 18_000, exe: 'Slack', title: 'inbox', idleMs: 0 },
+      { t: T0 + 20_000, exe: '', title: '', idleMs: 0 },
+      { t: T0 + 22_000, exe: '', title: '', idleMs: 0 },
+      { t: T0 + 24_000, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 26_000, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 28_000, exe: 'Code', title: 'dayfilm', idleMs: 0 },
+      { t: T0 + 30_000, exe: 'Code', title: 'dayfilm', idleMs: 0 }
+    ]
+    const now = T0 + 32_000
+    const full = buildDayRollup(samples, DATE, now)
+    const incremental = DayAggregator.fromSamples(samples, DATE).rollup(now)
+
+    expect(incremental).toEqual(full)
+    expect(full.appCuts).toBe(2)
+    expect(full.withinAppCuts).toBe(1)
+    expect(full.cuts).toBe((full.appCuts ?? 0) + (full.withinAppCuts ?? 0))
+  })
+
   it('时间不递增时拒绝追加', () => {
     const aggregator = new DayAggregator(DATE)
     expect(aggregator.append({ t: 2000, exe: 'Code', title: 'a', idleMs: 0 })).toBe(true)

@@ -16,6 +16,21 @@ export interface HudSettings {
   y: number | null
 }
 
+/**
+ * 模型通道：OpenAI 兼容端点。默认关闭，只有用户点按钮时才发请求。
+ * apiKey 以明文存 settings.json（与 coding agent 的配置文件同一口径），文档与界面都写明。
+ */
+export interface AiSettings {
+  /** 打开后才会发请求；关掉即回到纯规则口径 */
+  enabled: boolean
+  /** OpenAI 兼容基址，例如 https://api.openai.com/v1；空串表示未配置 */
+  baseUrl: string
+  /** 模型名，例如 gpt-4o-mini；空串表示未配置 */
+  model: string
+  /** 非本地模型需要的 key；本地服务可留空 */
+  apiKey: string
+}
+
 /** 放映音效：模式与音量。 */
 export interface SoundSettings {
   /** projector = 放映机底噪 + 剪辑咔哒；cuts = 只有剪辑咔哒 */
@@ -41,6 +56,8 @@ export interface Settings {
   autoExtraUnderSec: number
   /** 放映音效 */
   sound: SoundSettings
+  /** 模型通道 */
+  ai: AiSettings
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,7 +68,8 @@ export const DEFAULT_SETTINGS: Settings = {
   projects: [],
   hud: { visible: true, x: null, y: null },
   autoExtraUnderSec: 0,
-  sound: { mode: 'projector', volume: 0.35 }
+  sound: { mode: 'projector', volume: 0.35 },
+  ai: { enabled: false, baseUrl: '', model: '', apiKey: '' }
 }
 
 export const AUTO_EXTRA_OPTIONS: readonly { value: number; label: string }[] = [

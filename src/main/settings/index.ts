@@ -4,6 +4,7 @@ import {
   AUTO_EXTRA_OPTIONS,
   DEFAULT_SETTINGS,
   RETENTION_OPTIONS,
+  type AiSettings,
   type HudSettings,
   type ProjectRule,
   type Settings,
@@ -20,6 +21,10 @@ const MAX_TERMS = 100
 const MAX_PROJECTS = 20
 const MAX_PROJECT_NAME = 32
 const MAX_PROJECT_TERMS = 20
+const MAX_BASE_URL = 512
+const MAX_MODEL = 64
+const MAX_API_KEY = 256
+const HTTP_URL = /^https?:\/\/[^\s]+$/i
 
 function normalizeRetention(value: unknown, fallback: number): number {
   return typeof value === 'number' && RETENTION_VALUES.includes(value) ? value : fallback
@@ -115,6 +120,31 @@ function normalizeHud(value: unknown, base: HudSettings): HudSettings | null {
   }
 }
 
+/** 单行文本：去控制字符、trim、截断到上限。 */
+function normalizeLine(value: unknown, limit: number, fallback: string): string {
+  if (typeof value !== 'string') return fallback
+  const clean = value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, limit)
+  return clean
+}
+
+/**
+ * 模型通道：baseUrl 必须是 http(s) 绝对地址，否则回落到上一份合法值；
+ * 其余字段只做单行化与截断，允许为空（空表示未配置，不启用）。
+ */
+function normalizeAi(value: unknown, base: AiSettings): AiSettings | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  const rawUrl = normalizeLine(record.baseUrl, MAX_BASE_URL, base.baseUrl)
+  // 空串是合法的“未配置”；非空就必须是 http(s) 绝对地址。
+  const baseUrl = rawUrl.length === 0 || HTTP_URL.test(rawUrl) ? rawUrl : base.baseUrl
+  return {
+    enabled: normalizeBool(record.enabled, base.enabled),
+    baseUrl,
+    model: normalizeLine(record.model, MAX_MODEL, base.model),
+    apiKey: normalizeLine(record.apiKey, MAX_API_KEY, base.apiKey)
+  }
+}
+
 /** 字段级回落：缺失或类型不符的字段取 base 的同名字段。 */
 export function normalizeSettings(raw: unknown, base: Settings = DEFAULT_SETTINGS): Settings {
   const record = typeof raw === 'object' && raw !== null && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {}
@@ -122,6 +152,7 @@ export function normalizeSettings(raw: unknown, base: Settings = DEFAULT_SETTING
   const projects = normalizeProjects(record.projects)
   const hud = normalizeHud(record.hud, base.hud)
   const sound = normalizeSound(record.sound, base.sound)
+  const ai = normalizeAi(record.ai, base.ai)
   return {
     retentionDays: normalizeRetention(record.retentionDays, base.retentionDays),
     redactTerms: terms ?? [...base.redactTerms],
@@ -130,7 +161,8 @@ export function normalizeSettings(raw: unknown, base: Settings = DEFAULT_SETTING
     projects: projects ?? [...base.projects],
     hud: hud ?? { ...base.hud },
     autoExtraUnderSec: normalizeAutoExtra(record.autoExtraUnderSec, base.autoExtraUnderSec),
-    sound: sound ?? { ...base.sound }
+    sound: sound ?? { ...base.sound },
+    ai: ai ?? { ...base.ai }
   }
 }
 
@@ -213,6 +245,7 @@ export class SettingsStore {
     const projects = 'projects' in record ? normalizeProjects(record.projects) : null
     const hud = 'hud' in record ? normalizeHud(record.hud, current.hud) : null
     const sound = 'sound' in record ? normalizeSound(record.sound, current.sound) : null
+    const ai = 'ai' in record ? normalizeAi(record.ai, current.ai) : null
     const next: Settings = {
       retentionDays: normalizeRetention(record.retentionDays, current.retentionDays),
       redactTerms: terms ?? current.redactTerms,
@@ -221,7 +254,8 @@ export class SettingsStore {
       projects: projects ?? current.projects,
       hud: hud ?? { ...current.hud },
       autoExtraUnderSec: normalizeAutoExtra(record.autoExtraUnderSec, current.autoExtraUnderSec),
-      sound: sound ?? { ...current.sound }
+      sound: sound ?? { ...current.sound },
+      ai: ai ?? { ...current.ai }
     }
     this.save(next)
     return next

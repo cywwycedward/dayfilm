@@ -51,7 +51,8 @@ describe('SettingsStore 读取', () => {
       projects: [],
       hud: DEFAULT_SETTINGS.hud,
       autoExtraUnderSec: DEFAULT_SETTINGS.autoExtraUnderSec,
-      sound: DEFAULT_SETTINGS.sound
+      sound: DEFAULT_SETTINGS.sound,
+      ai: DEFAULT_SETTINGS.ai
     })
   })
 
@@ -229,9 +230,11 @@ describe('SettingsStore 保存', () => {
       projects: [],
       hud: DEFAULT_SETTINGS.hud,
       autoExtraUnderSec: DEFAULT_SETTINGS.autoExtraUnderSec,
-      sound: DEFAULT_SETTINGS.sound
+      sound: DEFAULT_SETTINGS.sound,
+      ai: DEFAULT_SETTINGS.ai
     })
     expect(Object.keys(next).sort()).toEqual([
+      'ai',
       'autoExtraUnderSec',
       'autoStart',
       'hud',
@@ -318,5 +321,36 @@ describe('sound 归一（v2.6）', () => {
 
   it('默认值是 projector + 0.35', () => {
     expect(normalizeSettings({}).sound).toEqual({ mode: 'projector', volume: 0.35 })
+  })
+})
+
+describe('ai 归一（v3）', () => {
+  it('默认关闭，且四个字段齐全', () => {
+    expect(normalizeSettings({}).ai).toEqual({ enabled: false, baseUrl: '', model: '', apiKey: '' })
+  })
+
+  it('baseUrl 必须是 http(s) 绝对地址，否则回落上一份', () => {
+    expect(normalizeSettings({ ai: { baseUrl: 'https://api.example.com/v1' } }).ai.baseUrl).toBe('https://api.example.com/v1')
+    expect(normalizeSettings({ ai: { baseUrl: 'http://127.0.0.1:11434/v1' } }).ai.baseUrl).toBe('http://127.0.0.1:11434/v1')
+    expect(normalizeSettings({ ai: { baseUrl: 'ftp://x' } }).ai.baseUrl).toBe('')
+    expect(normalizeSettings({ ai: { baseUrl: 'not a url' } }).ai.baseUrl).toBe('')
+  })
+
+  it('model 与 apiKey 去控制字符、截断，key 不回显到日志（只存明文）', () => {
+    expect(normalizeSettings({ ai: { model: '  gpt-4o-mini  ' } }).ai.model).toBe('gpt-4o-mini')
+    expect(normalizeSettings({ ai: { model: 'a\nb' } }).ai.model).toBe('ab')
+    expect(normalizeSettings({ ai: { apiKey: 'x'.repeat(400) } }).ai.apiKey.length).toBe(256)
+  })
+
+  it('非对象或坏类型整体回落上一份', () => {
+    const store = new SettingsStore(tempRoot())
+    store.update({ ai: { enabled: true, baseUrl: 'https://api.example.com/v1', model: 'm', apiKey: 'k' } })
+    expect(store.update({ ai: 'yes' }).ai).toEqual({
+      enabled: true,
+      baseUrl: 'https://api.example.com/v1',
+      model: 'm',
+      apiKey: 'k'
+    })
+    expect(store.update({ ai: { model: 'm2' } }).ai).toMatchObject({ enabled: true, model: 'm2' })
   })
 })

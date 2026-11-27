@@ -51,10 +51,17 @@ describe('parseCaptureLine', () => {
     expect(parsed.sample?.idleMs).toBe(0)
   })
 
+  it('空前台窗口是合法采样：exe 与标题为空串', () => {
+    expect(parseCaptureLine('{"ok":true,"title":"","exe":"","idleMs":4200}', NOW)).toEqual({
+      sample: { t: NOW, exe: '', title: '', idleMs: 4200 },
+      error: null
+    })
+  })
+
   it('脚本报错时给出可读原因', () => {
-    expect(parseCaptureLine('{"ok":false,"error":"no foreground window"}', NOW)).toEqual({
+    expect(parseCaptureLine('{"ok":false,"error":"snapshot failed"}', NOW)).toEqual({
       sample: null,
-      error: 'no foreground window'
+      error: 'snapshot failed'
     })
     expect(parseCaptureLine('{"ok":false}', NOW).error).toBe('采集失败')
   })
@@ -162,9 +169,21 @@ describe('createCapture 监督', () => {
   it('脚本报错时保留采集中断提示，不抛异常', () => {
     const { capture, spawned, statuses } = harness()
     capture.start()
-    spawned[0].stdout.write('{"ok":false,"error":"no foreground window"}\n')
-    expect(statuses.at(-1)?.error).toContain('no foreground window')
+    spawned[0].stdout.write('{"ok":false,"error":"snapshot failed"}\n')
+    expect(statuses.at(-1)?.error).toContain('snapshot failed')
     expect(statuses.every((status) => !status.capturing)).toBe(true)
+    capture.stop()
+  })
+
+  it('空前台窗口的合法采样清掉采样错误，并作为采样送到上层', () => {
+    const { capture, spawned, statuses, samples } = harness()
+    capture.start()
+    spawned[0].stdout.write('{"ok":false,"error":"snapshot failed"}\n')
+    expect(statuses.at(-1)?.error).toContain('snapshot failed')
+
+    spawned[0].stdout.write('{"ok":true,"title":"","exe":"","idleMs":9000}\n')
+    expect(statuses.at(-1)).toEqual({ capturing: true, error: null })
+    expect(samples.at(-1)).toEqual({ t: 1_000, exe: '', title: '', idleMs: 9000 })
     capture.stop()
   })
 

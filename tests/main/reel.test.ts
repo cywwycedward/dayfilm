@@ -33,6 +33,11 @@ class Day {
     return this.run(seconds, 'LockApp', 'Lock screen', 100_000)
   }
 
+  /** 没有前台窗口：脚本给空 exe 与空标题。 */
+  away(seconds: number): this {
+    return this.run(seconds, '', '', 0)
+  }
+
   /** 采样空洞：采集暂停或休眠唤醒。 */
   gap(seconds: number): this {
     this.next += seconds * 1000
@@ -119,16 +124,50 @@ describe('buildDayRollup 短镜头与中场休息', () => {
     const samples = [
       sample(T0, 'Code', 'dayfilm', 0),
       sample(T0 + STEP, 'Code', 'dayfilm', 0),
-      sample(T0 + 2 * STEP, 'LockApp', 'Lock screen', 59_000),
-      sample(T0 + 3 * STEP, 'LockApp', 'Lock screen', 59_000),
+      sample(T0 + 2 * STEP, 'Chrome', 'MDN Canvas', 59_000),
+      sample(T0 + 3 * STEP, 'Chrome', 'MDN Canvas', 59_000),
       sample(T0 + 4 * STEP, 'Code', 'dayfilm', 0),
       sample(T0 + 5 * STEP, 'Code', 'dayfilm', 0)
     ]
     const day = buildDayRollup(samples, DATE, T0 + 6 * STEP)
     expect(day.scenes.filter((scene) => scene.kind === 'intermission')).toEqual([])
     expect(day.idleMs).toBe(0)
-    expect(day.scenes.map((scene) => scene.exe)).toEqual(['Code', 'LockApp', 'Code'])
+    expect(day.scenes.map((scene) => scene.exe)).toEqual(['Code', 'Chrome', 'Code'])
     expect(day.cuts).toBe(2)
+  })
+
+  it('锁屏界面 LockApp 直接算中场休息，哪怕空闲值很小（真机锁屏就长这样）', () => {
+    const samples = [
+      sample(T0, 'Code', 'dayfilm', 0),
+      sample(T0 + STEP, 'Code', 'dayfilm', 0),
+      sample(T0 + 2 * STEP, 'LockApp', 'Windows 默认锁屏界面', 500),
+      sample(T0 + 3 * STEP, 'LockApp', 'Windows 默认锁屏界面', 2500),
+      sample(T0 + 4 * STEP, 'Code', 'dayfilm', 0),
+      sample(T0 + 5 * STEP, 'Code', 'dayfilm', 0)
+    ]
+    const day = buildDayRollup(samples, DATE, T0 + 6 * STEP)
+    expect(day.scenes.map((scene) => scene.kind)).toEqual(['shot', 'intermission', 'shot'])
+    expect(day.cuts).toBe(0)
+    expect(day.topApps.map((app) => app.exe)).toEqual(['Code'])
+  })
+})
+
+describe('away 无前台窗口', () => {
+  it('away 直接算中场休息，不生成镜头、不进 topApps、不计活跃时长', () => {
+    const day = new Day().shot('Code', 'dayfilm', 10).away(10).shot('Code', 'dayfilm', 10).rollup()
+    expect(day.scenes.map((scene) => scene.kind)).toEqual(['shot', 'intermission', 'shot'])
+    expect(day.scenes.find((scene) => scene.kind === 'intermission')).toMatchObject({ exe: '', title: '' })
+    expect(day.topApps.map((app) => app.exe)).toEqual(['Code'])
+    expect(day.activeMs).toBe(20_000)
+    expect(day.idleMs).toBe(8000)
+    expect(day.cuts).toBe(0)
+  })
+
+  it('away 前后是同一窗口也是两个镜头，不连成一条', () => {
+    const day = new Day().shot('Code', 'dayfilm', 10).away(4).shot('Code', 'dayfilm', 10).rollup()
+    expect(day.scenes.filter((scene) => scene.kind === 'shot')).toHaveLength(2)
+    expect(day.scenes.map((scene) => scene.id)).toEqual([`${DATE}-1`, `${DATE}-2`, `${DATE}-3`])
+    expect(day.cuts).toBe(0)
   })
 })
 
@@ -166,6 +205,19 @@ describe('buildDayRollup 剪辑与题材', () => {
     expect(rollup.topApps[0].seconds).toBe(70)
   })
 
+  it('剪辑拆成跨应用与应用内两个子计数，和等于 cuts', () => {
+    const day = new Day()
+      .shot('Code', 'dayfilm', 10)
+      .shot('Code', 'test.ts', 10)
+      .shot('Slack', '#general', 10)
+      .shot('Code', 'dayfilm', 10)
+      .rollup()
+    expect(day.withinAppCuts).toBe(1)
+    expect(day.appCuts).toBe(2)
+    expect(day.cuts).toBe(3)
+    expect(day.cuts).toBe((day.appCuts ?? 0) + (day.withinAppCuts ?? 0))
+  })
+
   /** cuts+1 个镜头均匀铺满 1 小时活跃时长，剪辑密度精确等于 cuts。 */
   function dayWithCuts(cuts: number): DayRollup {
     const totalSamples = 1800
@@ -192,6 +244,8 @@ describe('buildDayRollup 剪辑与题材', () => {
     const day = dayWithCuts(cuts)
     expect(day.activeMs).toBe(3_600_000)
     expect(day.cuts).toBe(cuts)
+    expect(day.appCuts).toBe(cuts)
+    expect(day.withinAppCuts).toBe(0)
     expect(day.verdict.cutRate).toBe(cuts)
     expect(day.verdict.label).toBe(label)
   })

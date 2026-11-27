@@ -1,6 +1,7 @@
 import type { DayRollup, Sample, Scene, SceneKind, TopApp } from '../../shared/types'
 import { orderSamples } from './index'
-import { GAP_MS, HOUR_MS, IDLE_MS, MIN_ACTIVE_MS, MIN_SHOT_MS, SAMPLE_MS, judge } from './rules'
+import { GAP_MS, HOUR_MS, MIN_ACTIVE_MS, MIN_SHOT_MS, SAMPLE_MS, judge } from './rules'
+import { sameWindow, sceneKindOf, transitionOf, type WindowId } from './transition'
 
 interface RunState {
   kind: SceneKind
@@ -28,9 +29,9 @@ export class DayAggregator {
   private lastT: number | null = null
   private activeMs = 0
   private idleMs = 0
-  private cuts = 0
-  private lastShotExe: string | null = null
-  private lastShotTitle: string | null = null
+  private appCuts = 0
+  private withinAppCuts = 0
+  private lastShot: WindowId | null = null
   private longest: Sealed | null = null
   private readonly totals = new Map<string, number>()
 
@@ -53,11 +54,11 @@ export class DayAggregator {
 
   append(sample: Sample): boolean {
     if (this.lastT !== null && sample.t <= this.lastT) return false
-    const kind: SceneKind = sample.idleMs >= IDLE_MS ? 'intermission' : 'shot'
+    const kind = sceneKindOf(sample)
     const open = this.open
     if (open) {
-      const sameWindow = kind === 'intermission' || (open.exe === sample.exe && open.title === sample.title)
-      if (open.kind === kind && sameWindow && sample.t - open.lastT <= GAP_MS) {
+      const same = kind === 'intermission' || sameWindow(open, sample)
+      if (open.kind === kind && same && sample.t - open.lastT <= GAP_MS) {
         open.lastT = sample.t
         this.lastT = sample.t
         return true
@@ -81,19 +82,21 @@ export class DayAggregator {
     const tail = this.open ? this.sealView(this.open, now) : null
     let activeMs = this.activeMs
     let idleMs = this.idleMs
-    let cuts = this.cuts
+    let appCuts = this.appCuts
+    let withinAppCuts = this.withinAppCuts
     let longest = this.longest
     if (tail) {
       if (tail.scene.kind === 'shot') {
         activeMs += tail.ms
-        if (this.lastShotExe !== null && (this.lastShotExe !== tail.scene.exe || this.lastShotTitle !== tail.scene.title)) {
-          cuts += 1
-        }
+        const transition = this.lastShot ? transitionOf(this.lastShot, tail.scene) : 'none'
+        if (transition === 'app') appCuts += 1
+        else if (transition === 'within-app') withinAppCuts += 1
         if (!longest || tail.ms > longest.ms) longest = tail
       } else {
         idleMs += tail.ms
       }
     }
+    const cuts = appCuts + withinAppCuts
 
     const totals = new Map(this.totals)
     if (tail && tail.scene.kind === 'shot') {
@@ -114,6 +117,8 @@ export class DayAggregator {
       idleMs,
       scenes: tail ? [...this.scenes, tail.scene] : this.scenes.slice(),
       cuts,
+      appCuts,
+      withinAppCuts,
       longestShot: longest ? longest.scene : null,
       topApps,
       verdict: judge(cutRate, longest),
@@ -153,11 +158,10 @@ export class DayAggregator {
     this.scenes.push(scene)
     if (scene.kind === 'shot') {
       this.activeMs += ms
-      if (this.lastShotExe !== null && (this.lastShotExe !== scene.exe || this.lastShotTitle !== scene.title)) {
-        this.cuts += 1
-      }
-      this.lastShotExe = scene.exe
-      this.lastShotTitle = scene.title
+      const transition = this.lastShot ? transitionOf(this.lastShot, scene) : 'none'
+      if (transition === 'app') this.appCuts += 1
+      else if (transition === 'within-app') this.withinAppCuts += 1
+      this.lastShot = scene
       this.totals.set(scene.exe, (this.totals.get(scene.exe) ?? 0) + ms)
       if (!this.longest || ms > this.longest.ms) this.longest = sealed
     } else {

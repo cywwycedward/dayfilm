@@ -8,3 +8,4 @@
 | 0002 | 存储：按日 JSONL 文件 | 已采纳 | [ADR 0002](0002-jsonl-day-files.md) |
 | 0003 | 采集：常驻 PowerShell 辅助进程 | 已采纳 | [ADR 0003](0003-powershell-capture-helper.md) |
 | 0004 | 下一步方向：一周电影（外部裁决） | 已采纳 | [ADR 0004](0004-week-film-direction.md) |
+| 0005 | 模型通道：OpenAI 兼容端点，显式 opt-in | 已采纳 | [ADR 0005](0005-model-channel.md) |

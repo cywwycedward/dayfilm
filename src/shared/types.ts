@@ -59,6 +59,10 @@ export interface DayRollup {
   scenes: Scene[]
   /** 非空闲镜头之间的切换次数 */
   cuts: number
+  /** 跨应用切换的次数（v4；缺省按 0 读，兼容旧夹具与旧快照） */
+  appCuts?: number
+  /** 同一应用内换窗口的次数（v4；同上） */
+  withinAppCuts?: number
   longestShot: Scene | null
   topApps: TopApp[]
   verdict: Verdict
@@ -84,4 +88,38 @@ export interface LiveState {
 
 export interface ScreenplayExport {
   path: string
+}
+
+/** 一条命中的理由：真正命中的词（小写）与真正起作用的日期。 */
+export interface SearchReason {
+  tokens: string[]
+  dates: string[]
+}
+
+export interface SearchHit {
+  scene: Scene
+  reason: SearchReason
+}
+
+/** 检索覆盖情况：全在保留范围内 / 部分日期已被清理 / 日期全部超出保留范围。 */
+export type SearchCoverage = 'full' | 'partial' | 'expired'
+
+export interface SearchOutcome {
+  hits: SearchHit[]
+  coverage: SearchCoverage
+  /** 保留范围内最早的日期；没有数据为 null */
+  retainedFrom: string | null
+}
+
+/** 上一集：所查看日期的锚点上一次出现的镜头。 */
+export interface EpisodeRef {
+  date: string
+  start: number
+  exe: string
+  title: string
+  seconds: number
+  /** 命中依据：原始标题完全相同，或属于同一个项目 */
+  match: 'title' | 'project'
+  /** 命中镜头所属项目；没有命中任何项目规则时为 null */
+  project: string | null
 }

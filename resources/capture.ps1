@@ -83,25 +83,31 @@ public static class DayfilmCapture
     public static string Snapshot()
     {
         IntPtr handle = GetForegroundWindow();
-        if (handle == IntPtr.Zero) return "{\"ok\":false,\"error\":\"no foreground window\"}";
-
-        StringBuilder title = new StringBuilder(1024);
-        int length = GetWindowTextW(handle, title, title.Capacity);
-        if (length < 0) length = 0;
-        if (length > title.Length) length = title.Length;
-
-        int pid;
-        GetWindowThreadProcessId(handle, out pid);
+        string windowTitle = "";
         string exe = "";
-        if (pid > 0)
+
+        // No foreground window (locked screen, secure desktop) is a valid
+        // sample with empty title and exe; the parent treats it as away.
+        if (handle != IntPtr.Zero)
         {
-            try { exe = Process.GetProcessById(pid).ProcessName; }
-            catch (Exception) { exe = ""; }
+            StringBuilder title = new StringBuilder(1024);
+            int length = GetWindowTextW(handle, title, title.Capacity);
+            if (length < 0) length = 0;
+            if (length > title.Length) length = title.Length;
+            windowTitle = title.ToString(0, length);
+
+            int pid;
+            GetWindowThreadProcessId(handle, out pid);
+            if (pid > 0)
+            {
+                try { exe = Process.GetProcessById(pid).ProcessName; }
+                catch (Exception) { exe = ""; }
+            }
         }
 
         StringBuilder json = new StringBuilder(256);
         json.Append("{\"ok\":true,\"title\":\"");
-        Escape(json, title.ToString(0, length));
+        Escape(json, windowTitle);
         json.Append("\",\"exe\":\"");
         Escape(json, exe);
         json.Append("\",\"idleMs\":");
