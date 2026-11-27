@@ -1,5 +1,7 @@
 # DESIGN
 
+当前主窗口采用 v4.4 [复盘工作台规格](docs/product/ui-workspace-research.md)；以下 v2–v4.3 主窗口方案留作历史记录。采集、数据隐私及程序化剧照的约束不变。
+
 Dayfilm 的视觉系统。产品真相见 [PRODUCT.md](PRODUCT.md)，界面铬细则见 [docs/product/visual-language.md](docs/product/visual-language.md)。本文件记录 v2.0「胶片脊柱」世界的骨架，v4.1 起按「单锚点 + 分组降噪」重排视觉层级（概念图 [ui-concept-v41-hierarchy.png](docs/product/assets/ui-concept-v41-hierarchy.png)，现状实测见文末）。
 
 ## 世界

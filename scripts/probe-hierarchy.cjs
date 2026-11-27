@@ -76,19 +76,50 @@ app.whenReady().then(async () => {
   await js("document.querySelector('.recent .shot')?.click()")
   report.day = await js(PROBE)
   report.shots.day = await shot('1-day-1280')
+  await js("document.querySelectorAll('.review-details').forEach(detail => { detail.open = true })")
+  await wait(250)
+  const listDoesNotOverlapStats = `document.querySelector('#listScroll').getBoundingClientRect().bottom <=
+    document.querySelector('#statsHeading').getBoundingClientRect().top`
+  report.expandedStatsNoOverlap = await js(listDoesNotOverlapStats)
+  report.shots.detail = await shot('7-expanded')
+  await js("document.querySelectorAll('.review-details').forEach(detail => { detail.open = false })")
 
   await dbg.sendCommand('Emulation.setDeviceMetricsOverride', { width: 960, height: 640, deviceScaleFactor: 1, mobile: false })
   await wait(1200)
   report.narrow = await js(PROBE)
   report.shots.narrow = await shot('2-day-960')
-  report.narrowScroll = await js(`(() => {
+  report.narrowScroll = await js(`(async () => {
     const main = document.querySelector('.main')
-    main.scrollTop = main.scrollHeight
+    const inView = (selector) => {
+      const box = document.querySelector(selector).getBoundingClientRect()
+      return box.width > 0 && box.height > 0 && box.top >= 0 && box.bottom <= innerHeight &&
+        box.left >= 0 && box.right <= innerWidth
+    }
+    const firstViewport = ['.hero__frame', '#play', '.rail__head', '#modeWeek'].every(inView)
+    const noHorizontalOverflow = main.scrollWidth <= main.clientWidth
+    const evidence = document.querySelector('.review-details--evidence')
+    const stats = document.querySelector('.review-details--stats')
+    const detailsStartClosed = !evidence.open && !stats.open
+    const persistentFacts = ['#episode', '#intermission', '#longestRest'].every(inView)
+    evidence.querySelector('summary').click()
+    stats.querySelector('summary').click()
+    const detailsOpen = evidence.open && stats.open
+    const expandedStatsNoOverlap = ${listDoesNotOverlapStats}
+    main.scrollTo({ top: main.scrollHeight, behavior: 'instant' })
+    await new Promise(resolve => requestAnimationFrame(resolve))
     const result = {
+      firstViewport,
+      noHorizontalOverflow,
       scrollTop: main.scrollTop,
       railVisible: document.querySelector('.rail').getBoundingClientRect().top < innerHeight,
-      evidenceReachable: document.querySelector('#discoveries').getBoundingClientRect().bottom <= innerHeight
+      detailsStartClosed,
+      detailsOpen,
+      expandedStatsNoOverlap,
+      persistentFacts,
+      evidenceReachable: inView('#discoveries .discovery:last-child')
     }
+    evidence.open = false
+    stats.open = false
     main.scrollTop = 0
     return result
   })()`)
@@ -97,12 +128,35 @@ app.whenReady().then(async () => {
 
   await js("(async () => { document.querySelector('#settings')?.click(); await new Promise(r => setTimeout(r, 900)) })()")
   report.shots.settings = await shot('3-settings')
-  await js("(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); await new Promise(r => setTimeout(r, 400)) })()")
+  report.settingsFocus = await js(`(() => {
+    const panel = document.querySelector('#panel')
+    const initial = document.activeElement.id === 'panelClose'
+    document.querySelector('[data-section="collect"]').click()
+    const trigger = panel.querySelector('[data-pane="collect"] [role="combobox"]')
+    if (!trigger) return { initial, selectConsumesEscape: false, returnsToSettings: false }
+    trigger.focus()
+    const key = (target, value) => target.dispatchEvent(new KeyboardEvent('keydown', {
+      key: value, bubbles: true, cancelable: true
+    }))
+    key(trigger, 'ArrowDown')
+    const open = trigger.getAttribute('aria-expanded') === 'true'
+    key(trigger, 'Escape')
+    const selectConsumesEscape = open && trigger.getAttribute('aria-expanded') === 'false' &&
+      document.querySelector('#settings').getAttribute('aria-expanded') === 'true'
+    key(trigger, 'Escape')
+    return { initial, selectConsumesEscape, returnsToSettings: document.activeElement.id === 'settings' }
+  })()`)
 
   await js("(async () => { document.querySelector('#modeWeek')?.click(); await new Promise(r => setTimeout(r, 1800)) })()")
   report.shots.week = await shot('4-week')
   report.weekBadgesFit = await js(`[...document.querySelectorAll('.arc .tag')].every((tag) =>
     tag.getBoundingClientRect().right <= tag.closest('.arc').getBoundingClientRect().right)`)
+  report.daySwitchFromWeek = await js(`(() => {
+    const day = document.querySelector('#modeDay')
+    const wasVisible = day.getBoundingClientRect().width > 0
+    day.click()
+    return wasVisible && day.getAttribute('aria-pressed') === 'true'
+  })()`)
 
   await load('2026-11-27T21:17:50+08:00')
   await wait(1000)
@@ -113,11 +167,14 @@ app.whenReady().then(async () => {
   await win.loadFile(join(root, 'out', 'renderer', 'index.html'), { query: { mock: 'fresh' } })
   await wait(1000)
   report.emptyState = await js("document.querySelector('#genre').dataset.empty")
+  report.emptyListCollapsed = await js(`document.querySelector('#listScroll').hidden &&
+    document.querySelector('.recent__cols').getBoundingClientRect().height === 0 &&
+    document.querySelector('#empty').getBoundingClientRect().height > 0`)
   report.shots.empty = await shot('6-empty')
 
   writeFileSync(join(outDir, 'report.json'), JSON.stringify(report, null, 1))
   console.log(JSON.stringify(report, null, 1))
-  app.exit(0)
+  app.exit(report.expandedStatsNoOverlap && report.narrowScroll.expandedStatsNoOverlap ? 0 : 1)
 }).catch((error) => {
   console.error(error)
   app.exit(1)
