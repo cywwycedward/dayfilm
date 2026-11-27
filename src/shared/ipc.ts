@@ -1,5 +1,6 @@
 import type { Settings } from './settings'
-import type { DayRollup, LiveState, Scene, SceneMark, ScreenplayExport } from './types'
+import type { StorySuggestions } from './stories'
+import type { DayRollup, EpisodeRef, LiveState, SceneMark, ScreenplayExport, SearchOutcome } from './types'
 
 /** IPC 通道名。主进程与 preload 共用，避免字符串漂移。 */
 export const IPC = {
@@ -7,6 +8,7 @@ export const IPC = {
   listDays: 'dayfilm:list-days',
   live: 'dayfilm:live',
   search: 'dayfilm:search',
+  previousEpisode: 'dayfilm:previous-episode',
   exportScreenplay: 'dayfilm:export-screenplay',
   getSettings: 'dayfilm:get-settings',
   setSettings: 'dayfilm:set-settings',
@@ -16,6 +18,9 @@ export const IPC = {
   exportEdl: 'dayfilm:export-edl',
   exportPdf: 'dayfilm:export-pdf',
   setMark: 'dayfilm:set-mark',
+  suggestStories: 'dayfilm:suggest-stories',
+  aiStories: 'dayfilm:ai-stories',
+  aiProbe: 'dayfilm:ai-probe',
   setHud: 'dayfilm:set-hud',
   quit: 'dayfilm:quit',
   tick: 'dayfilm:tick'
@@ -26,7 +31,9 @@ export interface DayfilmApi {
   getDay(date?: string): Promise<DayRollup>
   listDays(): Promise<string[]>
   live(): Promise<LiveState>
-  search(query: string): Promise<Scene[]>
+  search(query: string): Promise<SearchOutcome>
+  /** 所查看日期的锚点（最长镜头）上一次出现在哪一天；没有命中返回 null。 */
+  previousEpisode(date: string): Promise<EpisodeRef | null>
   exportScreenplay(date: string): Promise<ScreenplayExport>
   getSettings(): Promise<Settings>
   /** 只提交需要改动的字段，返回落盘后的完整设置。 */
@@ -43,6 +50,12 @@ export interface DayfilmApi {
   exportPdf(date: string): Promise<{ path: string }>
   /** 给某个镜头打标记（正片 / 花絮 / 清除），返回重算后的当日汇总。 */
   setMark(date: string, startMs: number, mark: SceneMark | null): Promise<DayRollup>
+  /** 从最近 30 天的标题里找故事线候选（纯规则，不发网络请求）。 */
+  suggestStories(): Promise<StorySuggestions>
+  /** 用户点按钮时让模型补充候选；失败时仍返回确定性候选，failure 说明原因。 */
+  aiStories(): Promise<StorySuggestions>
+  /** 设置页的“测试连接”：验证基址、key 与模型名。 */
+  aiProbe(): Promise<{ ok: boolean; detail: string }>
   /** 显示/隐藏导演 HUD，返回切换后的状态。 */
   setHud(visible: boolean): Promise<{ visible: boolean }>
   /** 真正退出应用（含停止采集）。 */

@@ -1,11 +1,10 @@
 import type { DayRollup, Sample, Scene, SceneKind, SceneMark, TopApp } from '../../shared/types'
 import { totalByProject } from '../../shared/projects'
 import type { ProjectRule } from '../../shared/settings'
+import { sameWindow, sceneKindOf, transitionOf } from './transition'
 import {
   GAP_MS,
   HOUR_MS,
-  IDLE_MS,
-  MAX_RESULTS,
   MIN_ACTIVE_MS,
   MIN_SHOT_MS,
   SAMPLE_MS,
@@ -49,9 +48,9 @@ function groupRuns(samples: Sample[]): Run[] {
   const runs: Run[] = []
   let current: Run | null = null
   for (const sample of samples) {
-    const kind: SceneKind = sample.idleMs >= IDLE_MS ? 'intermission' : 'shot'
-    const sameWindow = kind === 'intermission' || (current?.exe === sample.exe && current?.title === sample.title)
-    if (current && current.kind === kind && sameWindow && sample.t - current.lastT <= GAP_MS) {
+    const kind = sceneKindOf(sample)
+    const same = kind === 'intermission' || (current !== null && sameWindow(current, sample))
+    if (current && current.kind === kind && same && sample.t - current.lastT <= GAP_MS) {
       current.lastT = sample.t
       continue
     }
@@ -72,6 +71,33 @@ function sceneEnd(run: Run, next: Run | undefined, now: number): number {
   if (run.kind === 'intermission') return run.lastT
   const limit = next ? next.firstT : now
   return Math.max(run.firstT, Math.min(run.lastT + SAMPLE_MS, limit))
+}
+
+/** 正在拍摄的镜头：取尾部同窗口的非空闲采样，不必等到满 3 秒成镜。 */
+export function liveScene(samples: Sample[], day: DayRollup, date: string, now: number): Scene | null {
+  const last = samples[samples.length - 1]
+  if (!last || sceneKindOf(last) !== 'shot') return null
+  let start = last.t
+  for (let index = samples.length - 2; index >= 0; index -= 1) {
+    const sample = samples[index]
+    if (sceneKindOf(sample) !== 'shot' || !sameWindow(sample, last)) break
+    if (last.t - sample.t > GAP_MS) break
+    start = sample.t
+  }
+  // 与切分结果对齐时复用它的 id，界面才能高亮到胶片上的同一块。
+  const match = day.scenes.find(
+    (scene) => scene.kind === 'shot' && scene.start === start && scene.exe === last.exe && scene.title === last.title
+  )
+  const end = Math.max(now, last.t)
+  return {
+    id: match ? match.id : `${date}-live`,
+    start,
+    end,
+    exe: last.exe,
+    title: last.title,
+    seconds: Math.round((end - start) / 1000),
+    kind: 'shot'
+  }
 }
 
 /**
@@ -156,12 +182,14 @@ export function buildDayRollup(samples: Sample[], date: string, now: number, opt
   const activeMs = shots.reduce((total, item) => total + item.ms, 0)
   const idleMs = kept.reduce((total, item) => (item.scene.kind === 'intermission' ? total + item.ms : total), 0)
 
-  let cuts = 0
+  let appCuts = 0
+  let withinAppCuts = 0
   for (let index = 1; index < shots.length; index += 1) {
-    const prev = shots[index - 1].scene
-    const curr = shots[index].scene
-    if (prev.exe !== curr.exe || prev.title !== curr.title) cuts += 1
+    const transition = transitionOf(shots[index - 1].scene, shots[index].scene)
+    if (transition === 'app') appCuts += 1
+    else if (transition === 'within-app') withinAppCuts += 1
   }
+  const cuts = appCuts + withinAppCuts
 
   let longest: { scene: Scene; ms: number } | null = null
   for (const shot of shots) {
@@ -188,6 +216,8 @@ export function buildDayRollup(samples: Sample[], date: string, now: number, opt
     idleMs,
     scenes: kept.map((item) => item.scene),
     cuts,
+    appCuts,
+    withinAppCuts,
     longestShot: longest ? longest.scene : null,
     topApps,
     verdict: judge(cutRate, longest),
@@ -198,18 +228,8 @@ export function buildDayRollup(samples: Sample[], date: string, now: number, opt
   return applyMarks(base, options.marks, options.autoExtraUnderSec ?? 0)
 }
 
-/** 标题与进程名的子串匹配，不区分大小写；跨日期合并后按开始时间倒序，最多 200 条。 */
-export function searchScenes(query: string, days: DayRollup[]): Scene[] {
-  const needle = query.trim().toLowerCase()
-  if (needle.length === 0) return []
-  const hits: Scene[] = []
-  for (const day of days) {
-    for (const scene of day.scenes) {
-      if (scene.title.toLowerCase().includes(needle) || scene.exe.toLowerCase().includes(needle)) hits.push(scene)
-    }
-  }
-  return hits.sort((a, b) => b.start - a.start).slice(0, MAX_RESULTS)
-}
+/** 检索在 `./search` 里：归一化 + 多词 AND + 时间词。这里保持原有导出，调用方不用改。 */
+export { searchScenes } from './search'
 
 function clock(ms: number): string {
   const date = new Date(ms)

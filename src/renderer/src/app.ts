@@ -1,15 +1,36 @@
 /** 界面主体：构建骨架、维护状态、把状态写进 DOM。数据只来自 DayfilmSource。 */
-import type { DayRollup, LiveState, Scene, SceneMark } from '../../shared/types'
+import type {
+  DayRollup,
+  EpisodeRef,
+  LiveState,
+  Scene,
+  SceneMark,
+  SearchOutcome,
+  SearchReason
+} from '../../shared/types'
 import {
   AUTO_EXTRA_OPTIONS,
   BUILTIN_REDACT_TERMS,
   DEFAULT_SETTINGS,
   RETENTION_OPTIONS,
+  type ProjectRule,
   type Settings
 } from '../../shared/settings'
 import { createSource, type DayfilmSource } from './data'
 import { createSelect, type SelectHandle } from './select'
+import { findDiscoveries } from './lib/discover'
+import { afterLongestShot, longestIntermission } from './lib/day-insights'
+import {
+  buildDiscoveryRows,
+  createRequestToken,
+  episodeText,
+  intermissionText,
+  reasonText,
+  searchEmptyCopy,
+  type RowDeps
+} from './lib/hero-rows'
 import { sceneAt } from './lib/reel'
+import type { StoryCandidate } from '../../shared/stories'
 import { pickHighlights } from './lib/highlights'
 import { computePoster, type PosterTheme } from './lib/poster'
 import {
@@ -107,7 +128,8 @@ interface State {
   live: LiveState | null
   anchor: Anchor
   selectedId: string | null
-  results: Scene[] | null
+  /** 检索结果；null 表示正在看当天胶片 */
+  search: SearchOutcome | null
   playing: boolean
   speed: Speed
   playhead: number
@@ -140,7 +162,16 @@ interface State {
   calendarOpen: boolean
   calendarDays: Map<string, CalendarDay>
   calendarLoading: boolean
+  /** 设置抽屉当前分区 */
+  settingsSection: SettingsSection
+  /** 正在行内编辑的项目名；null 表示没有在编辑 */
+  editingProject: string | null
+  /** 故事线候选：null 表示还没点过按钮 */
+  candidates: StoryCandidate[] | null
+  candidateNote: string | null
 }
+
+export type SettingsSection = 'collect' | 'projects' | 'model' | 'resident' | 'system'
 
 interface Ui {
   date: HTMLElement
@@ -157,6 +188,7 @@ interface Ui {
   elapsed: HTMLElement
   genre: HTMLElement
   verdict: HTMLElement
+  intermission: HTMLElement
   liveExe: HTMLElement
   liveTitle: HTMLElement
   heroFrame: HTMLElement
@@ -184,11 +216,15 @@ interface Ui {
   longestRest: HTMLElement
   projectTotals: HTMLElement
   statMarks: HTMLElement
+  statCuts: HTMLElement
+  statCutsValue: HTMLElement
   listCount: HTMLElement
   listScroll: HTMLElement
   spacer: HTMLElement
   list: HTMLElement
   empty: HTMLElement
+  searchNote: HTMLElement
+  episode: HTMLElement
   announce: HTMLElement
   exportMenuBtn: HTMLButtonElement
   exportMenu: HTMLElement
@@ -205,6 +241,9 @@ interface Ui {
   panel: HTMLElement
   panelClose: HTMLButtonElement
   panelStatus: HTMLElement
+  settingsNav: HTMLElement
+  settingsPane: HTMLElement
+  navCountProjects: HTMLElement
   retention: HTMLElement
   termChips: HTMLElement
   termForm: HTMLFormElement
@@ -222,6 +261,7 @@ interface Ui {
   hudToggle: HTMLInputElement
   quitBtn: HTMLButtonElement
   builtinTerms: HTMLElement
+  builtinCount: HTMLElement
   compare: HTMLElement
   compareScrim: HTMLElement
   compareClose: HTMLButtonElement
@@ -281,6 +321,19 @@ interface Ui {
   onboarding: HTMLElement
   onboardStart: HTMLButtonElement
   onboardSettings: HTMLButtonElement
+  discoveries: HTMLElement
+  candidateList: HTMLElement
+  findCandidates: HTMLButtonElement
+  aiCandidates: HTMLButtonElement
+  candidateHint: HTMLElement
+  aiEnabled: HTMLInputElement
+  aiBaseUrl: HTMLInputElement
+  aiModel: HTMLInputElement
+  aiKey: HTMLInputElement
+  aiSave: HTMLButtonElement
+  aiProbe: HTMLButtonElement
+  aiKeyClear: HTMLButtonElement
+  aiStatus: HTMLElement
 }
 
 let state!: State
@@ -378,6 +431,7 @@ function collect(root: HTMLElement): Ui {
     elapsed: pick<HTMLElement>('elapsed'),
     genre: pick<HTMLElement>('genre'),
     verdict: pick<HTMLElement>('verdict'),
+    intermission: pick<HTMLElement>('intermission'),
     liveExe: pick<HTMLElement>('liveExe'),
     liveTitle: pick<HTMLElement>('liveTitle'),
     heroFrame: pick<HTMLElement>('heroFrame'),
@@ -405,11 +459,15 @@ function collect(root: HTMLElement): Ui {
     longestRest: pick<HTMLElement>('longestRest'),
     projectTotals: pick<HTMLElement>('projectTotals'),
     statMarks: pick<HTMLElement>('statMarks'),
+    statCuts: pick<HTMLElement>('statCuts'),
+    statCutsValue: pick<HTMLElement>('statCutsValue'),
     listCount: pick<HTMLElement>('listCount'),
     listScroll: pick<HTMLElement>('listScroll'),
     spacer: pick<HTMLElement>('listSpacer'),
     list: pick<HTMLElement>('list'),
     empty: pick<HTMLElement>('empty'),
+    searchNote: pick<HTMLElement>('searchNote'),
+    episode: pick<HTMLElement>('episode'),
     announce: pick<HTMLElement>('announce'),
     exportMenuBtn: pick<HTMLButtonElement>('exportMenuBtn'),
     exportMenu: pick<HTMLElement>('exportMenu'),
@@ -426,6 +484,9 @@ function collect(root: HTMLElement): Ui {
     panel: pick<HTMLElement>('panel'),
     panelClose: pick<HTMLButtonElement>('panelClose'),
     panelStatus: pick<HTMLElement>('panelStatus'),
+    settingsNav: pick<HTMLElement>('settingsNav'),
+    settingsPane: pick<HTMLElement>('settingsPane'),
+    navCountProjects: pick<HTMLElement>('navCountProjects'),
     retention: pick<HTMLElement>('settingRetention'),
     termChips: pick<HTMLElement>('termChips'),
     termForm: pick<HTMLFormElement>('termForm'),
@@ -443,6 +504,7 @@ function collect(root: HTMLElement): Ui {
     hudToggle: pick<HTMLInputElement>('settingHud'),
     quitBtn: pick<HTMLButtonElement>('quitBtn'),
     builtinTerms: pick<HTMLElement>('builtinTerms'),
+    builtinCount: pick<HTMLElement>('builtinCount'),
     compare: pick<HTMLElement>('compare'),
     compareScrim: pick<HTMLElement>('compareScrim'),
     compareClose: pick<HTMLButtonElement>('compareClose'),
@@ -501,7 +563,20 @@ function collect(root: HTMLElement): Ui {
     dragRegion: pick<HTMLElement>('dragRegion'),
     onboarding: pick<HTMLElement>('onboarding'),
     onboardStart: pick<HTMLButtonElement>('onboardStart'),
-    onboardSettings: pick<HTMLButtonElement>('onboardSettings')
+    onboardSettings: pick<HTMLButtonElement>('onboardSettings'),
+    discoveries: pick<HTMLElement>('discoveries'),
+    candidateList: pick<HTMLElement>('candidateList'),
+    findCandidates: pick<HTMLButtonElement>('findCandidates'),
+    aiCandidates: pick<HTMLButtonElement>('aiCandidates'),
+    candidateHint: pick<HTMLElement>('candidateHint'),
+    aiEnabled: pick<HTMLInputElement>('aiEnabled'),
+    aiBaseUrl: pick<HTMLInputElement>('aiBaseUrl'),
+    aiModel: pick<HTMLInputElement>('aiModel'),
+    aiKey: pick<HTMLInputElement>('aiKey'),
+    aiSave: pick<HTMLButtonElement>('aiSave'),
+    aiProbe: pick<HTMLButtonElement>('aiProbe'),
+    aiKeyClear: pick<HTMLButtonElement>('aiKeyClear'),
+    aiStatus: pick<HTMLElement>('aiStatus')
   }
 }
 
@@ -729,6 +804,14 @@ function renderHero(): void {
   else if (isToday()) ui.verdict.textContent = '还没有拍摄任何素材，今天这卷胶片是空的。'
   else ui.verdict.textContent = '这一天没有采样，胶片是空的。'
   renderOnboarding()
+  renderIntermission()
+}
+
+/** v4 S6：当天最长一段中场休息，只读一行；只说时长、次数与窗口名。 */
+function renderIntermission(): void {
+  const shape = longestIntermission(state.day)
+  ui.intermission.hidden = shape === null
+  ui.intermission.textContent = shape === null ? '' : intermissionText(shape)
 }
 
 /** 首次运行引导：只在当天没镜头且未确认过时显示。 */
@@ -796,6 +879,9 @@ function renderStats(): void {
   ui.metricLongest.textContent = longest ? fmtDuration(longest.seconds) : '—'
   ui.longestRest.textContent =
     day.scenes.length === 0 ? '—' : fmtDuration(longestRestSeconds(day))
+  // 剪辑拆分单独一行：三列网格放第四个格子会掉到下一行、还带着左分隔线
+  ui.statCuts.hidden = day.scenes.length === 0
+  ui.statCutsValue.textContent = `跨应用 ${day.appCuts ?? 0} · 应用内 ${day.withinAppCuts ?? 0}`
   ui.statMarks.replaceChildren(
     (() => {
       const left = node('span', 'stats__marks-main')
@@ -822,8 +908,10 @@ function renderStats(): void {
 /** 项目汇总一行：按命中时长倒序，最多三项。 */
 function renderProjectLine(day: DayRollup): void {
   const rules = state.settings.projects
+  // 没有规则就不占位：说明文字不进统计区，想让项目出现就去设置里加一条
+  ui.projectTotals.hidden = rules.length === 0
   if (rules.length === 0) {
-    ui.projectTotals.textContent = '项目：在设置里加一条规则'
+    ui.projectTotals.textContent = ''
     return
   }
   const totals = totalByProject(day.scenes, rules).slice(0, 3)
@@ -837,7 +925,8 @@ function buildRow(
   scene: Scene,
   withDate: boolean,
   index: number,
-  total: number
+  total: number,
+  reason?: SearchReason
 ): HTMLLIElement {
   const item = node('li', 'shot-row')
   item.setAttribute('aria-setsize', String(total))
@@ -858,6 +947,8 @@ function buildRow(
     const auto = scene.markSource === 'auto'
     titleCell.append(node('span', auto ? 'shot__mark is-auto' : 'shot__mark', auto ? '花絮（自动）' : '花絮'))
   }
+  // 检索命中理由：和项目标签同一枚 chip，不新增样式
+  if (reason) titleCell.append(node('span', 'shot__project shot__reason', reasonText(reason)))
   button.append(
     node('span', 'shot__clock', `${stamp}${fmtClock(scene.start)}`),
     titleCell,
@@ -906,30 +997,34 @@ async function markScene(scene: Scene, mark: SceneMark): Promise<void> {
 
 /** 列表当前展示的数据：检索结果或当天胶片*/
 function visibleScenes(): readonly Scene[] {
-  return state.results ?? state.day.scenes
+  return state.search === null ? state.day.scenes : state.search.hits.map((hit) => hit.scene)
 }
 
+/** 命中理由一行：`命中 edl · 日期 11-19`；只有其中一项时只写那一项。 */
+
 function renderList(): void {
-  const searching = state.results !== null
+  const outcome = state.search
   const scenes = visibleScenes()
   const shots = scenes.filter((scene) => scene.kind === 'shot').length
   const rests = scenes.length - shots
-  if (searching) {
-    ui.listCount.textContent = `${scenes.length} 条${scenes.length >= SEARCH_LIMIT ? '（上限 200）' : ''}`
-  } else {
+  if (outcome === null) {
     ui.listCount.textContent = rests > 0 ? `${rests} 段中场休息 · ${shots} 个镜头` : `${shots} 个镜头`
+  } else {
+    ui.listCount.textContent = `${scenes.length} 条${scenes.length >= SEARCH_LIMIT ? '（上限 200）' : ''}`
   }
 
   const last = scenes[scenes.length - 1]
   // 数据签名变短了：窗口化后只关心首尾与长度，末尾镜头的时长仍会跟着 tick 更新
-  const signature = `${searching ? 'q' : 'd'}|${scenes.length}|${scenes[0]?.id ?? ''}|${last?.id ?? ''}|${last?.end ?? 0}`
+  const mode = outcome === null ? 'd' : 'q'
+  const signature = `${mode}|${scenes.length}|${scenes[0]?.id ?? ''}|${last?.id ?? ''}|${last?.end ?? 0}`
   if (signature !== listSignature) {
     listSignature = signature
     windowSignature = ''
   }
 
   ui.empty.hidden = scenes.length > 0
-  ui.empty.textContent = searching ? '没有匹配的镜头' : emptyCopy()
+  ui.empty.textContent = outcome === null ? emptyCopy() : searchEmptyCopy(outcome)
+  ui.searchNote.hidden = !(outcome !== null && outcome.coverage === 'partial' && scenes.length > 0)
   renderWindow()
 }
 
@@ -950,12 +1045,13 @@ function renderWindow(): void {
   windowSignature = signature
 
   const today = isoDate(Date.now())
-  const withDate = state.results !== null
+  const withDate = state.search !== null
   const rows: HTMLLIElement[] = []
   for (let index = range.start; index < range.end; index += 1) {
-    const scene = scenes[index]
+    const hit = state.search?.hits[index]
+    const scene = hit?.scene ?? scenes[index]
     rows.push(
-      buildRow(scene, withDate && isoDate(scene.start) !== today, index, scenes.length)
+      buildRow(scene, withDate && isoDate(scene.start) !== today, index, scenes.length, hit?.reason)
     )
   }
   ui.list.replaceChildren(...rows)
@@ -1093,10 +1189,35 @@ function renderDay(): void {
   renderHero()
   renderStats()
   renderHighlights()
+  renderDiscoveries()
   renderList()
   highlight()
   updateTransport()
   paintSpineCanvas()
+}
+
+/* 剪辑发现（v3） ------------------------------------------------------ */
+
+/** hero 里原有发现最多三行，最后固定追加一行「镜头之后」，总共最多四条。 */
+function renderDiscoveries(): void {
+  const found = state.mode === 'day' ? findDiscoveries(state.day, state.settings.projects) : []
+  const after = state.mode === 'day' ? afterLongestShot(state.day) : null
+  const rows = buildDiscoveryRows(document, found, after, discoveryDeps())
+  ui.discoveries.hidden = rows === null
+  ui.discoveries.replaceChildren(...(rows ?? []))
+}
+
+/** 发现区的公共行为：证据时刻 → 选中镜头（切日与滚动复用现有逻辑）。 */
+function discoveryDeps(): RowDeps {
+  return {
+    clock: fmtClock,
+    onPick: (startMs: number) => {
+      const scene = state.day.scenes.find((entry) => entry.kind === 'shot' && entry.start >= startMs)
+      if (!scene) return
+      selectScene(scene)
+      revealRow(scene.id, 'center')
+    }
+  }
 }
 
 function announce(message: string): void {
@@ -1499,12 +1620,48 @@ renderDates()
   revealSpine(state.playhead)
   paintSpineCanvas()
   void loadNote(date)
+  void loadEpisode()
   if (state.mode === 'day') playTitleCard()
 }
 
 /** 空状态的文案：今天还没素材和历史某天没采样是两件事*/
 function emptyCopy(): string {
   return isToday() ? '还没有拍摄任何素材' : '这一天没有采样'
+}
+
+/** 检索空状态的两种文案：日期超出保留范围 vs 普通没有命中。 */
+
+/* 上一集（v4 S4） ---------------------------------------------------- */
+
+let episodeRef: EpisodeRef | null = null
+/** 请求令牌：快速切日时丢弃晚到的旧响应 */
+const episodeRequests = createRequestToken()
+
+async function loadEpisode(): Promise<void> {
+  const token = episodeRequests.next()
+  const date = state.date
+  try {
+    const ref = await state.source.previousEpisode(date)
+    if (!episodeRequests.isCurrent(token)) return
+    episodeRef = ref
+  } catch {
+    if (!episodeRequests.isCurrent(token)) return
+    episodeRef = null
+  }
+  renderEpisode()
+}
+
+function renderEpisode(): void {
+  const ref = episodeRef
+  ui.episode.hidden = ref === null
+  ui.episode.textContent = ref === null ? '' : episodeText(ref, fmtClock)
+}
+
+/** 整行可点：切到那一天并选中那个镜头（复用现有切日 / 选镜头逻辑）。 */
+async function gotoEpisode(ref: EpisodeRef): Promise<void> {
+  if (state.date !== ref.date) await loadDate(ref.date)
+  const scene = state.day.scenes.find((item) => item.start === ref.start)
+  if (scene) selectScene(scene)
 }
 
 function setSpeed(speed: Speed): void {
@@ -1530,15 +1687,15 @@ async function exportDay(): Promise<void> {
 async function runSearch(): Promise<void> {
   const query = ui.search.value.trim()
   if (query.length === 0) {
-    state.results = null
+    state.search = null
     resetListScroll()
     renderList()
     highlight()
     return
   }
-  const hits = await state.source.search(query)
+  const outcome = await state.source.search(query)
   if (query !== ui.search.value.trim()) return
-  state.results = hits.slice(0, SEARCH_LIMIT)
+  state.search = { ...outcome, hits: outcome.hits.slice(0, SEARCH_LIMIT) }
   resetListScroll()
   renderList()
   highlight()
@@ -1618,6 +1775,7 @@ function applyExternalSettings(next: Settings): void {
   windowSignature = ''
   renderList()
   refreshWeekIfVisible()
+  void loadEpisode()
 }
 
 function setPanelStatus(text: string, kind: 'idle' | 'ok' | 'error'): void {
@@ -1634,6 +1792,7 @@ function setPanelStatus(text: string, kind: 'idle' | 'ok' | 'error'): void {
 
 /** 内置脱敏词是合同里给的常量，这里只渲染一次 */
 function renderSettingsStatic(): void {
+  ui.builtinCount.textContent = String(BUILTIN_REDACT_TERMS.length)
   ui.builtinTerms.textContent = BUILTIN_REDACT_TERMS.join(' · ')
 }
 
@@ -1665,6 +1824,23 @@ function renderSettings(): void {
   if (chips.length === 0) chips.push(node('span', 'term term--empty', '还没有自定义关键词'))
   ui.termChips.replaceChildren(...chips)
   renderProjectCards()
+  renderAiSettings()
+  renderSettingsSection()
+  // 导航上只写数量：有几条项目，扫一眼就知道状态
+  ui.navCountProjects.textContent = settings.projects.length > 0 ? String(settings.projects.length) : ''
+}
+
+/** 分区导航：抽屉只展示一个分区，结构本身说明有哪些设置。 */
+function renderSettingsSection(): void {
+  for (const item of ui.settingsNav.querySelectorAll<HTMLButtonElement>('.nav-item')) {
+    const active = item.dataset.section === state.settingsSection
+    item.classList.toggle('is-active', active)
+    if (active) item.setAttribute('aria-current', 'true')
+    else item.removeAttribute('aria-current')
+  }
+  for (const pane of ui.settingsPane.querySelectorAll<HTMLElement>('[data-pane]')) {
+    pane.hidden = pane.dataset.pane !== state.settingsSection
+  }
 }
 
 async function loadSettings(): Promise<void> {
@@ -1680,6 +1856,7 @@ async function loadSettings(): Promise<void> {
     windowSignature = ''
     renderList()
     refreshWeekIfVisible()
+    void loadEpisode()
     setPanelStatus('', 'idle')
   } catch (error) {
     setPanelStatus(`读取设置失败：${messageOf(error)}`, 'error')
@@ -1713,6 +1890,8 @@ async function applySettings(patch: Partial<Settings>): Promise<boolean> {
       renderList()
       refreshWeekIfVisible()
     }
+    // 上一集看项目规则：设置一变就重查，但不跟 2 秒 tick 刷新
+    void loadEpisode()
     return true
   } catch (error) {
     state.settings = before
@@ -1837,7 +2016,7 @@ function onListScroll(): void {
 /** 换到某一天：退出检索、回到列表顶部、重置视窗*/
 async function selectDay(date: string): Promise<void> {
   ui.search.value = ''
-  state.results = null
+  state.search = null
   resetListScroll()
   await loadDate(date)
 }
@@ -2471,23 +2650,64 @@ async function applyHudVisible(visible: boolean): Promise<void> {
 function renderProjectCards(): void {
   const rules = state.settings.projects
   if (rules.length === 0) {
-    ui.projectCards.replaceChildren(node('p', 'hint', '还没有项目规则'))
+    ui.projectCards.replaceChildren(node('p', 'note-line', '还没有项目'))
     return
   }
   ui.projectCards.replaceChildren(
+    projectHeadRow(),
     ...rules.map((rule) => {
-      const card = node('div', 'project')
-      const head = node('div', 'project__head')
-      head.append(node('strong', 'project__name', rule.name))
+      if (state.editingProject === rule.name) return projectEditRow(rule)
+      const row = node('div', 'project')
+      row.append(node('strong', 'project__name', rule.name), node('span', 'project__terms', rule.terms.join('、')))
+      const actions = node('div', 'project__actions')
+      const edit = node('button', 'project__edit', '编辑')
+      edit.type = 'button'
+      edit.dataset.projectEdit = rule.name
       const remove = node('button', 'project__remove', '删除')
       remove.type = 'button'
       remove.dataset.project = rule.name
       remove.setAttribute('aria-label', `删除项目 ${rule.name}`)
-      head.append(remove)
-      card.append(head, node('p', 'project__terms', rule.terms.join('、')))
-      return card
+      actions.append(edit, remove)
+      row.append(actions)
+      return row
     })
   )
+}
+
+/** 表头：三列只写列名，不写解释 */
+function projectHeadRow(): HTMLElement {
+  const head = node('div', 'ptable__head')
+  head.append(node('span', '', '项目名'), node('span', '', '关键词'), node('span', 'ptable__act', '操作'))
+  return head
+}
+
+/** 行内编辑：同一个位置展开成两个输入，不弹窗、不换页面。 */
+function projectEditRow(rule: ProjectRule): HTMLElement {
+  const row = node('div', 'project project--editing')
+  const fields = node('div', 'project__edit-row')
+  const name = node('input')
+  name.type = 'text'
+  name.value = rule.name
+  name.maxLength = 32
+  name.autocomplete = 'off'
+  name.setAttribute('aria-label', '项目名')
+  const terms = node('input')
+  terms.type = 'text'
+  terms.value = rule.terms.join('、')
+  terms.maxLength = 200
+  terms.autocomplete = 'off'
+  terms.setAttribute('aria-label', '关键词，逗号分隔')
+  fields.append(name, terms)
+  const actions = node('div', 'project__edit-actions')
+  const save = node('button', 'btn btn--primary', '保存')
+  save.type = 'button'
+  save.dataset.projectSave = rule.name
+  const cancel = node('button', 'btn btn--quiet', '取消')
+  cancel.type = 'button'
+  cancel.dataset.projectCancel = rule.name
+  actions.append(save, cancel)
+  row.append(fields, actions)
+  return row
 }
 
 function splitTerms(input: string): string[] {
@@ -2526,6 +2746,188 @@ async function addProject(): Promise<void> {
 
 function removeProject(name: string): void {
   void applySettings({ projects: state.settings.projects.filter((rule) => rule.name !== name) })
+}
+
+/** 保存行内编辑：名字与关键词都非空，同名不同条视为冲突。 */
+async function saveProjectEdit(original: string): Promise<void> {
+  const row = ui.projectCards.querySelector<HTMLElement>('.project--editing')
+  const inputs = row === null ? [] : [...row.querySelectorAll<HTMLInputElement>('input')]
+  const name = (inputs[0]?.value ?? '').trim().slice(0, 32)
+  const terms = splitTerms(inputs[1]?.value ?? '')
+  if (name.length === 0 || terms.length === 0) {
+    setPanelStatus('项目名与关键词都不能为空', 'error')
+    return
+  }
+  const clash = state.settings.projects.some(
+    (rule) => rule.name !== original && rule.name.toLowerCase() === name.toLowerCase()
+  )
+  if (clash) {
+    setPanelStatus('已经有同名项目', 'error')
+    return
+  }
+  const projects = state.settings.projects.map((rule) => (rule.name === original ? { name, terms } : rule))
+  const saved = await applySettings({ projects })
+  if (!saved) return
+  state.editingProject = null
+  renderProjectCards()
+  setPanelStatus('', 'idle')
+}
+
+/* 故事线候选（v3） ---------------------------------------------------- */
+
+function candidateRow(candidate: StoryCandidate, index: number): HTMLElement {
+  const row = node('div', 'candidate')
+  const head = node('div', 'candidate__head')
+  // 名字可改：模型给的名字只是个提议，落盘前用户能一句话改掉
+  const name = node('input', 'candidate__name')
+  name.type = 'text'
+  name.value = candidate.name
+  name.maxLength = 32
+  name.autocomplete = 'off'
+  name.spellcheck = false
+  name.dataset.candidateIndex = String(index)
+  name.setAttribute('aria-label', '项目名')
+  const add = node('button', 'btn btn--quiet candidate__add', '添加')
+  add.type = 'button'
+  add.dataset.candidateIndex = String(index)
+  add.setAttribute('aria-label', `把 ${candidate.name} 添加为项目`)
+  head.append(name, add)
+  const meta = node('div', 'candidate__meta-row')
+  meta.append(
+    node('span', 'candidate__meta', `${candidate.scenes} 个镜头 · ${fmtMinutes(candidate.ms)}`),
+    node('span', 'candidate__source', candidate.source === 'model' ? '模型' : '规则')
+  )
+  row.append(head, meta, node('p', 'candidate__example', candidate.example))
+  return row
+}
+
+function renderCandidates(): void {
+  const list = state.candidates
+  if (list === null) {
+    ui.candidateList.replaceChildren()
+    ui.candidateHint.hidden = true
+    return
+  }
+  if (list.length === 0) {
+    ui.candidateList.replaceChildren()
+    ui.candidateHint.hidden = false
+    ui.candidateHint.textContent = state.candidateNote ?? '暂无候选'
+    return
+  }
+  ui.candidateList.replaceChildren(...list.map((candidate, index) => candidateRow(candidate, index)))
+  ui.candidateHint.hidden = state.candidateNote === null
+  if (state.candidateNote !== null) ui.candidateHint.textContent = state.candidateNote
+}
+
+/** 只出草稿：候选不落盘，用户点“添加为项目”才变成规则。 */
+async function loadCandidates(withModel: boolean): Promise<void> {
+  ui.findCandidates.disabled = true
+  ui.aiCandidates.disabled = true
+  setPanelStatus(withModel ? '正在让模型补充…' : '正在找候选…', 'idle')
+  try {
+    const result = withModel ? await state.source.aiStories() : await state.source.suggestStories()
+    state.candidates = result.candidates
+    let note: string | null = null
+    if (result.failure !== null) {
+      note =
+        result.failure.kind === 'not-configured'
+          ? '模型通道未配置：只显示规则候选。'
+          : `模型不可用：${result.failure.detail}`
+    }
+    state.candidateNote = note
+    renderCandidates()
+    setPanelStatus('', 'idle')
+    // 模型候选落在「项目」分区：直接切过去，否则按钮点完像没发生
+    if (withModel && result.candidates.length > 0) {
+      state.settingsSection = 'projects'
+      renderSettingsSection()
+    }
+  } catch (error) {
+    state.candidates = []
+    state.candidateNote = `找候选失败：${messageOf(error)}`
+    renderCandidates()
+    setPanelStatus('找候选失败', 'error')
+  } finally {
+    ui.findCandidates.disabled = false
+    ui.aiCandidates.disabled = !state.settings.ai.enabled
+  }
+}
+
+async function addCandidate(index: number): Promise<void> {
+  const list = state.candidates
+  const candidate = list?.[index]
+  if (!candidate) return
+  const input = ui.candidateList.querySelector<HTMLInputElement>(`input[data-candidate-index="${index}"]`)
+  const name = (input?.value ?? '').trim().slice(0, 32) || candidate.name
+  if (state.settings.projects.some((rule) => rule.name.toLowerCase() === name.toLowerCase())) {
+    setPanelStatus('已经有同名项目', 'error')
+    return
+  }
+  const saved = await applySettings({
+    projects: [...state.settings.projects, { name, terms: [candidate.term] }]
+  })
+  if (!saved) return
+  state.candidates = list.filter((_, position) => position !== index)
+  renderCandidates()
+}
+
+/* 模型通道（v3） ------------------------------------------------------ */
+
+function renderAiSettings(): void {
+  const ai = state.settings.ai
+  ui.aiEnabled.checked = ai.enabled
+  if (document.activeElement !== ui.aiBaseUrl) ui.aiBaseUrl.value = ai.baseUrl
+  if (document.activeElement !== ui.aiModel) ui.aiModel.value = ai.model
+  const configured = ai.baseUrl.trim().length > 0 && ai.model.trim().length > 0
+  ui.aiProbe.disabled = !configured
+  ui.aiKeyClear.disabled = ai.apiKey.length === 0
+  ui.aiCandidates.disabled = !(configured && ai.enabled)
+  // key 不回显：只说明是否已设置（重置时为“未设置”）
+  if (ai.apiKey.length > 0) ui.aiKey.placeholder = '已设置'
+  else ui.aiKey.placeholder = '本地服务可留空'
+  if (ai.enabled === false) ui.aiStatus.textContent = '模型通道已关闭。'
+  else if (configured) ui.aiStatus.textContent = ''
+  else ui.aiStatus.textContent = '填好接口地址与模型名后才会发请求。'
+}
+
+async function saveAi(): Promise<void> {
+  const typedKey = ui.aiKey.value.trim()
+  const next = {
+    enabled: ui.aiEnabled.checked,
+    baseUrl: ui.aiBaseUrl.value.trim(),
+    model: ui.aiModel.value.trim(),
+    // 留空且已有 key 时保留旧的：保存其它字段不能把 key 抹掉
+    apiKey: typedKey.length > 0 ? typedKey : state.settings.ai.apiKey
+  }
+  if (next.baseUrl.length > 0 && !/^https?:\/\//i.test(next.baseUrl)) {
+    setPanelStatus('接口地址必须以 http(s):// 开头', 'error')
+    return
+  }
+  const saved = await applySettings({ ai: next })
+  if (saved) {
+    ui.aiKey.value = ''
+    renderAiSettings()
+  }
+}
+
+/** 显式清除：key 不回显，所以只能靠这个按钮拿掉。 */
+async function clearAiKey(): Promise<void> {
+  await applySettings({ ai: { ...state.settings.ai, apiKey: '' } })
+  ui.aiKey.value = ''
+  renderAiSettings()
+}
+
+async function probeAi(): Promise<void> {
+  ui.aiProbe.disabled = true
+  ui.aiStatus.textContent = '正在连接…'
+  try {
+    const result = await state.source.aiProbe()
+    ui.aiStatus.textContent = result.ok ? '连接正常' : `连接失败：${result.detail}`
+  } catch (error) {
+    ui.aiStatus.textContent = `连接失败：${messageOf(error)}`
+  } finally {
+    ui.aiProbe.disabled = false
+  }
 }
 
 /* 一周电----------------------------------------------------------- */
@@ -2838,6 +3240,16 @@ function applyWindowMaximized(maximized: boolean): void {
 
 function bindEvents(): void {
   ui.search.addEventListener('input', scheduleSearch)
+  // 上一集：整行可点（键盘同样可用），切到那天并选中那个镜头
+  ui.episode.addEventListener('click', () => {
+    if (episodeRef !== null) void gotoEpisode(episodeRef)
+  })
+  ui.episode.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return
+    if (episodeRef === null) return
+    event.preventDefault()
+    void gotoEpisode(episodeRef)
+  })
   // 无边框窗口按钮（主进程未就绪时忽略）
   ui.winMin.addEventListener('click', () => windowBridge?.minimize?.())
   ui.winMax.addEventListener('click', () => windowBridge?.toggleMaximize?.())
@@ -3059,9 +3471,61 @@ function bindEvents(): void {
   ui.projectCards.addEventListener('click', (event) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
-    const button = target.closest<HTMLElement>('[data-project]')
-    const name = button?.dataset.project
+    const edit = target.closest<HTMLElement>('[data-project-edit]')
+    if (edit?.dataset.projectEdit !== undefined) {
+      state.editingProject = edit.dataset.projectEdit
+      renderProjectCards()
+      return
+    }
+    const cancel = target.closest<HTMLElement>('[data-project-cancel]')
+    if (cancel !== null) {
+      state.editingProject = null
+      renderProjectCards()
+      return
+    }
+    const save = target.closest<HTMLElement>('[data-project-save]')
+    if (save?.dataset.projectSave !== undefined) {
+      void saveProjectEdit(save.dataset.projectSave)
+      return
+    }
+    const remove = target.closest<HTMLElement>('[data-project]')
+    const name = remove?.dataset.project
     if (name) removeProject(name)
+  })
+  ui.findCandidates.addEventListener('click', () => {
+    void loadCandidates(false)
+  })
+  ui.aiCandidates.addEventListener('click', () => {
+    void loadCandidates(true)
+  })
+  ui.candidateList.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const button = target.closest<HTMLElement>('[data-candidate-index]')
+    if (!(button instanceof HTMLButtonElement)) return
+    const index = Number(button.dataset.candidateIndex)
+    if (Number.isInteger(index)) void addCandidate(index)
+  })
+  ui.aiEnabled.addEventListener('change', () => {
+    void saveAi()
+  })
+  ui.aiSave.addEventListener('click', () => {
+    void saveAi()
+  })
+  ui.aiProbe.addEventListener('click', () => {
+    void probeAi()
+  })
+  ui.aiKeyClear.addEventListener('click', () => {
+    void clearAiKey()
+  })
+  ui.settingsNav.addEventListener('click', (event) => {
+    const target = event.target
+    if (!(target instanceof HTMLElement)) return
+    const item = target.closest<HTMLElement>('.nav-item')
+    const section = item?.dataset.section as SettingsSection | undefined
+    if (!section) return
+    state.settingsSection = section
+    renderSettingsSection()
   })
   ui.modeDay.addEventListener('click', () => setMode('day'))
   ui.modeWeek.addEventListener('click', () => setMode('week'))
@@ -3138,7 +3602,7 @@ export async function boot(): Promise<void> {
     live,
     anchor: { wall: Date.now(), now: live.now },
     selectedId: null,
-    results: null,
+    search: null,
     playing: false,
     speed: 600,
     playhead: 0,
@@ -3161,7 +3625,11 @@ export async function boot(): Promise<void> {
     compareCache: new Map(),
     calendarOpen: false,
     calendarDays: new Map(),
-    calendarLoading: false
+    calendarLoading: false,
+    settingsSection: 'projects',
+    editingProject: null,
+    candidates: null,
+    candidateNote: null
   }
   state.playhead = initialPlayhead()
 
@@ -3173,7 +3641,7 @@ export async function boot(): Promise<void> {
     value: state.date,
     onChange: (value) => {
       ui.search.value = ''
-      state.results = null
+      state.search = null
       resetListScroll()
       void loadDate(value)
     }
@@ -3202,6 +3670,7 @@ export async function boot(): Promise<void> {
   renderDates()
   renderSettingsStatic()
   renderSettings()
+  renderCandidates()
   renderLive()
   setSpeed(state.speed)
   setPlayButton(false)
@@ -3222,6 +3691,8 @@ export async function boot(): Promise<void> {
 
   void loadNote(date)
   void loadSettings()
+  // 上一集要用项目规则，先拿回设置后查一次；之后只在切日与设置变化时重查
+  void loadEpisode()
 
   const observer = new ResizeObserver(measure)
   observer.observe(ui.spineScroll)

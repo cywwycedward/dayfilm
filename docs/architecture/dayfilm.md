@@ -12,7 +12,9 @@
 | 闸门层 | `src/main/ingest`, `src/main/redact` | 采样唯一入口：时钟守卫 → 脱敏 → 进缓存 + 进落盘缓冲 | 无 Electron |
 | 存储层 | `src/main/store`, `src/main/store/buffer` | 按日追加 JSONL、按日读取、列出日期；写失败留在内存缓冲并每 5 秒重试 | Node fs |
 | 状态文件层 | `src/main/settings`, `src/main/notes`, `src/main/marks`, `src/main/retention` | 四类 JSON 状态（设置 / 手记 / 标记）与保留期清理；写入都是 tmp + rename | Node fs |
-| 切分层 | `src/main/reel` | 采样 → 镜头、汇总、题材、检索；`rules` 定口径，`aggregate` 增量聚合，`cache` 按日 LRU | 无 Electron |
+| 切分层 | `src/main/reel` | 采样 → 镜头、汇总、题材、检索；`rules` 定口径，`aggregate` 增量聚合，`cache` 按日 LRU，`search` 归一化 + 多词 + 时间词 | 无 Electron |
+| 语义层 | `src/shared/stories`、`src/renderer/src/lib/discover` | 标题归一化与实体抽取、故事线候选、剪辑发现；纯函数，同输入同输出 | 无 Electron、无网络 |
+| 模型层 | `src/main/ai` | 用户显式触发时调用 OpenAI 兼容端点，只产出可核对的候选；超时与失败一律降级 | `openai` SDK；主进程唯一网络出口 |
 | 导出层 | `src/main/edl`, `src/main/pdf`, `src/main/export`, `src/main/save-image` | 剧本 Markdown、CMX3600 EDL、PDF、PNG 的生成与写盘 | Node fs |
 | 接口层 | `src/main/index.ts`, `src/main/ipc`, `src/main/security`, `src/preload` | Electron 生命周期、通道登记、来源守卫、向两个窗口推送状态 | Electron |
 | 常驻界面 | `src/main/tray`, `src/main/hud`, `src/main/shortcuts`, `src/main/window-chrome` | 三态托盘、置顶 HUD 窗口、全局快捷键、无边框窗口按钮 | Electron |
@@ -59,6 +61,13 @@
 - **海报在界面渲染、主进程只负责存盘。** 程序的视觉资产（剧照、配色、版式）都在渲染层，让主进程重画一遍等于把设计复制两份；界面画好 PNG 交给 `saveImage`，主进程只做校验与写文件。
 - **手记是独立数据。** 不塞进日文件（采样是事实，手记是观点），单独放 `notes.json`，损坏时按空集合处理。
 - **周视图是派生视图。** 界面按需拉 7 天 `getDay` 并分桶，不新增存储。
+
+## v3 的取舍
+
+- **智能先走确定性。** 故事线候选与剪辑发现都是纯函数（`src/shared/stories` / `lib/discover`），模型只在用户点按钮时补充候选。理由：同一份数据必须每次渲染一致，而模型输出跨版本会漂。
+- **模型只在主进程，且只认 OpenAI 兼容协议。** 渲染层 CSP 与 sandbox 一个字不改；本机 Ollama、自建网关、云厂商都只是 `ai.baseUrl` 的不同取值，不需要第二套代码（[ADR 0005](../agents/adr/0005-model-channel.md)）。
+- **模型不吃原始采样。** 只喂聚合摘要（进程名、归一化标题、分钟数，最多 200 条），并且结果必须能在本地数出命中镜头才保留——没有证据的候选直接丢弃。
+- **候选不落盘。** 它是一次性的界面草稿，确认后才写 `settings.projects`；不新增状态文件，也不进渲染路径。
 
 ## v2 的取舍
 

@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { searchOutcome } from '../../src/main/reel/search'
+import { cleanupExpired } from '../../src/main/retention'
 import { DayStore, localDate } from '../../src/main/store'
-import type { Sample } from '../../src/shared/types'
+import type { DayRollup, Sample } from '../../src/shared/types'
+
+const DAY_MS = 86_400_000
 
 const roots: string[] = []
 
@@ -127,5 +131,64 @@ describe('DayStore', () => {
   it('localDate 使用本地时区而非 UTC', () => {
     expect(localDate(new Date(2026, 0, 5, 0, 30, 0).getTime())).toBe('2026-01-05')
     expect(localDate(new Date(2026, 11, 31, 23, 30, 0).getTime())).toBe('2026-12-31')
+  })
+})
+
+describe('保留边界与保留期内的空日期', () => {
+  const NOW = new Date(2026, 10, 27, 12, 0, 0).getTime()
+  const RETENTION_DAYS = 30
+  // 与主进程的 keptDays() / cleanupExpired 同一口径：
+  // 保留范围的下界 = 今天 − 保留天数，且那天本身还在
+  const cutoff = localDate(NOW - RETENTION_DAYS * DAY_MS)
+
+  const EMPTY: DayRollup = {
+    date: '',
+    firstAt: null,
+    lastAt: null,
+    activeMs: 0,
+    idleMs: 0,
+    scenes: [],
+    cuts: 0,
+    longestShot: null,
+    topApps: [],
+    verdict: { label: '长镜头', note: '', cutRate: 0 },
+    featureMs: 0,
+    extraMs: 0
+  }
+
+  function storeWith(dates: string[]): DayStore {
+    const root = tempRoot()
+    const dir = join(root, 'days')
+    mkdirSync(dir, { recursive: true })
+    for (const date of dates) writeFileSync(join(dir, `${date}.jsonl`), '', 'utf8')
+    return new DayStore(root)
+  }
+
+  /** 保留期边界上的日期
+   * （今天 − 30 天 = 10-28）与保留期内但没有文件的 11-20。 */
+  const EXPIRED = localDate(NOW - (RETENTION_DAYS + 1) * DAY_MS)
+  const withFiles = (): DayStore => storeWith(['2026-11-27', '2026-10-29', cutoff, EXPIRED])
+  const retainedOf = (store: DayStore): string[] => store.listDays().filter((date) => date >= cutoff)
+
+  it('保留期最后一天仍在保留范围内，再早一天已被清理', () => {
+    const store = withFiles()
+    const retained = retainedOf(store)
+    expect(retained).toContain(cutoff)
+    expect(retained).not.toContain(EXPIRED)
+    // 清理器与 keptDays() 同一口径：只删保留边界之前的日文件
+    expect(cleanupExpired(store, RETENTION_DAYS, NOW).removed).toEqual([EXPIRED])
+  })
+
+  it('保留期内没有日文件：只是没有命中，不是超出保留范围', () => {
+    const retained = retainedOf(withFiles())
+    const outcome = searchOutcome('2026-11-20', { retained: () => retained, day: () => EMPTY }, NOW)
+    expect(outcome).toEqual({ hits: [], coverage: 'full', retainedFrom: cutoff })
+  })
+
+  it('保留边界之前的日期才算超出保留范围', () => {
+    const retained = retainedOf(withFiles())
+    const outcome = searchOutcome(EXPIRED, { retained: () => retained, day: () => EMPTY }, NOW)
+    expect(outcome.coverage).toBe('expired')
+    expect(outcome.retainedFrom).toBe(cutoff)
   })
 })

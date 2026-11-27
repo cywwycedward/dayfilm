@@ -210,6 +210,20 @@ R10–R18 的逐条核对结果。核对方式以"真实构建产物 + 脚本读
 
 累计：`npm run typecheck` exit=0，`npm test` 43 文件 / 635 例通过，`npm run build` 通过，impeccable detector 0 条。
 
+## v4.0 故事的连续性
+
+| 项 | 结果 | 证据 |
+| --- | --- | --- |
+| 上一集 | 通过 | 合成两天数据（同一标题出现在 11-24 与 11-26），打开 11-26 时 hero 显示 `上一集 · 11-24` / `dayfilm — Visual Studio Code` / `14:00 · 40 分钟`；整行可点，切回 11-24 |
+| 中场休息的形状 | 通过 | 休息前最后一条与休息后同窗口时文案为 `10:00 离开 20 分钟，回来还是同一个窗口`；`exe` 相同、`title` 不同的情况由单测锁定为「回来换成了 X」 |
+| 镜头之后 | 通过 | `09:31 之后的 15 分钟：dayfilm × 2 · GitHub × 1 · README.md × 1`；与原「反复」一行并存，共 2 行（上限 4） |
+| 剪辑子计数 | 通过 | 右栏 `剪辑数 4`，下一行 `跨应用 2 · 应用内 2`；两子计数之和等于总数 |
+| 检索范围与理由 | 通过 | 时间词 `11月26日` 命中 7 条、理由均为 `日期 11-26`（在默认 7 天窗口之外仍可查）；`dayfilm` 命中 5 条、理由 `命中 dayfilm`；`2024-03-05` 返回空并显示 `所选日期已超出保留范围；当前仅保留 2026-11-24 及之后的记录` |
+| 真机锁屏 | 通过（并据此改了实现） | 锁屏后 `capture.ps1` 连续输出 `{"ok":true,"title":"Windows 默认锁屏界面","exe":"LockApp","idleMs":140954…}`：Win10/11 锁屏并不是「没有前台窗口」，前台进程是 `LockApp`。`idleMs` 涨过 60 秒后本来就落进中场休息，但 Win+L 刚按下那几十秒空闲值很小，会被记成一个假镜头；因此 `isAway()` 增加 `LockApp` 判定，锁屏不计镜头、不产生剪辑 |
+
+累计：`npm run typecheck` exit=0，`npm test` 56 文件 / 732 例通过，`npm run build` 通过。
+探针：`node scripts/probe-v4.mjs`（独立 userData + 两天合成采样，不碰本机数据）。
+
 ## 复现命令
 
 ```powershell
@@ -221,6 +235,7 @@ node scripts/probe-settings.mjs         # 设置面板、暂停、错误字段
 node scripts/probe-ui.mjs               # 历史日切换 + 检索
 node scripts/probe-recovery.mjs         # 采集自恢复、无孤儿进程
 node scripts/probe-metrics.mjs 60 --hidden
+node scripts/probe-v4.mjs                # v4 界面：上一集 / 中场休息 / 镜头之后 / 剪辑子计数 / 检索
 node scripts/probe-packaged.mjs dist\win-unpacked\Dayfilm.exe
 node scripts/pack/verify.cjs dist\win-unpacked
 ```
@@ -232,5 +247,7 @@ node scripts/pack/verify.cjs dist\win-unpacked
 - **代码签名**：无证书，首次运行会有 SmartScreen"未知发布者"提示。
 - **真机休眠/唤醒**：只核对了 `powerMonitor` 事件接线与逻辑，没有真的合盖测试。
 - **便携 exe 的远程调试**：NSIS 便携包不转发 `--remote-debugging-port`，因此便携版的证据来自窗口无障碍树与数据落盘，而不是 DevTools 协议。
+- **v4 的打包产物**：本轮只跑 `npm run build` 与未打包的 `out/` 产物探针，没有重新打 `npm run dist`、也没有在便携 exe 上复验 v4 的新行。
+- **锁屏的完整回归**：只验到「锁屏期间采样与显示正确」；解锁后 HUD 恢复、长时间锁屏跨零点的落盘没有单独复测。
 
 

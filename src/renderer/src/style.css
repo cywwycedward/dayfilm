@@ -1436,7 +1436,7 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: min(420px, 92vw);
+  width: min(520px, 94vw);
   height: 100%;
   border-left: 1px solid var(--panel-line);
   background: var(--panel);
@@ -1459,9 +1459,77 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .panel__body {
+  display: grid;
   flex: 1;
-  padding: 0 var(--s5) var(--s5);
+  grid-template-columns: 118px minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel__nav {
+  display: flex;
+  flex-direction: column;
+  padding: var(--s4) 0;
+  border-right: 1px solid var(--hairline);
+}
+
+.nav-item {
+  padding: 7px 20px;
+  border: 0;
+  background: transparent;
+  color: rgba(236, 231, 220, 0.45);
+  font: 400 12px/1.4 var(--font-mono);
+  letter-spacing: 0.06em;
+  text-align: left;
+  cursor: pointer;
+  transition: color 140ms var(--ease), background 140ms var(--ease);
+}
+
+.nav-item:hover {
+  color: var(--paper);
+}
+
+.nav-item.is-active {
+  background: rgba(232, 180, 90, 0.07);
+  color: var(--amber);
+}
+
+.nav-item__count {
+  float: right;
+  color: rgba(236, 231, 220, 0.32);
+  font-variant-numeric: tabular-nums;
+}
+
+.nav-item.is-active .nav-item__count {
+  color: rgba(232, 180, 90, 0.7);
+}
+
+.nav-item:focus-visible {
+  outline: none;
+  color: var(--paper);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.panel__pane {
+  padding: var(--s4) var(--s5) var(--s5);
   overflow-y: auto;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+}
+
+/* .pane 的 display 会赢过 UA 的 [hidden]，显式关掉 */
+.pane[hidden] {
+  display: none;
+}
+
+.pane__block {
+  margin-top: var(--s5);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--hairline);
 }
 
 .fieldset {
@@ -1569,7 +1637,9 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 
 .panel__status {
   min-height: 16px;
-  margin: var(--s3) 0 0;
+  margin: 0;
+  padding: 10px var(--s5);
+  border-top: 1px solid var(--hairline);
   font: 400 11px/1.5 var(--font-mono);
   color: rgba(236, 231, 220, 0.32);
 }
@@ -1582,6 +1652,124 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   color: var(--paper-dim);
 }
 
+/* 设置分组：标题只做定位，说明交给控件与占位符 */
+.group {
+  padding: var(--s4) 0 var(--s3);
+  border-top: 1px solid var(--hairline);
+}
+
+.group:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.group__title {
+  margin: 0 0 var(--s3);
+  font: 400 10px/1.3 var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(236, 231, 220, 0.55);
+}
+
+.inline-form {
+  display: flex;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+
+.inline-form input {
+  flex: 1;
+  min-width: 0;
+}
+
+.disclosure {
+  margin-top: var(--s2);
+}
+
+.disclosure summary {
+  font: 400 10px/1.9 var(--font-mono);
+  color: rgba(236, 231, 220, 0.4);
+  cursor: pointer;
+  list-style: none;
+}
+
+.disclosure summary::-webkit-details-marker {
+  display: none;
+}
+
+.disclosure summary::before {
+  content: '+';
+  display: inline-block;
+  width: 12px;
+}
+
+.disclosure[open] summary::before {
+  content: '−';
+}
+
+.disclosure__body {
+  margin: 2px 0 0;
+  font: 400 10px/1.6 var(--font-mono);
+  color: rgba(236, 231, 220, 0.4);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s1) var(--s2);
+  margin-top: var(--s2);
+}
+
+.kv--tight {
+  grid-template-columns: 64px minmax(0, 1fr);
+  margin-top: var(--s3);
+}
+
+.kv__label {
+  font: 400 10px/1.6 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(236, 231, 220, 0.4);
+}
+
+.kv__input {
+  width: 100%;
+}
+
+.kv__value {
+  flex: none;
+  font: 400 10px/1.6 var(--font-mono);
+  color: rgba(236, 231, 220, 0.55);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+
+.note-line {
+  margin: var(--s1) 0 0;
+  font: 400 10px/1.6 var(--font-mono);
+  color: rgba(236, 231, 220, 0.32);
+}
+
+.note-line[hidden] {
+  display: none;
+}
+
+.note-line--warn {
+  color: rgba(232, 180, 90, 0.6);
+}
+
+.switch-stack {
+  display: flex;
+  flex-direction: column;
+}
+
 .projects {
   display: flex;
   flex-direction: column;
@@ -1589,7 +1777,11 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .project {
-  padding: var(--s2) 0;
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr) auto;
+  gap: var(--s2);
+  align-items: baseline;
+  padding: var(--s1) 0;
   border-bottom: 1px solid var(--hairline);
 }
 
@@ -1619,9 +1811,85 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
 }
 
 .project__terms {
-  margin: 2px 0 0;
+  margin: 0;
+  overflow: hidden;
   font: 400 10px/1.5 var(--font-mono);
   color: rgba(236, 231, 220, 0.4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 故事线候选（v3）：草稿行，确认后才进 settings.projects */
+.candidates {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+
+.candidate {
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.candidate__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.candidate__name {
+  flex: 0 1 auto;
+  min-width: 72px;
+  max-width: 62%;
+  padding: 0 0 1px;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--paper);
+  font: 400 12px/1.4 var(--font-mono);
+}
+
+.candidate__name:hover {
+  border-bottom-color: var(--hairline);
+}
+
+.candidate__name:focus {
+  border-bottom-color: var(--amber);
+  outline: none;
+}
+
+.candidate__meta {
+  flex: 1;
+  overflow: hidden;
+  font: 400 10px/1.4 var(--font-mono);
+  color: rgba(236, 231, 220, 0.4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate__source {
+  flex: none;
+  font: 400 9px/1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  color: rgba(236, 231, 220, 0.32);
+}
+
+.candidate__example {
+  margin: 2px 0 var(--s1);
+  overflow: hidden;
+  font: 400 10px/1.5 var(--font-mono);
+  color: rgba(236, 231, 220, 0.4);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.candidate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: center;
 }
 
 .project-form {
@@ -3038,6 +3306,53 @@ input[type='range']:focus-visible::-webkit-slider-thumb {
   white-space: nowrap;
 }
 
+/* 剪辑发现（v3）：题材下面最多三行，都可点回证据镜头 */
+.discoveries {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.discoveries[hidden] {
+  display: none;
+}
+
+.discovery {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--paper-dim);
+  font: 400 12px/1.5 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+
+.discovery:hover .discovery__text {
+  color: var(--paper);
+}
+
+.discovery__label {
+  flex: none;
+  padding: 0 4px;
+  border: 1px solid rgba(232, 180, 90, 0.28);
+  border-radius: 2px;
+  font: 400 9px/1.5 var(--font-mono);
+  letter-spacing: 0.12em;
+  color: var(--amber);
+}
+
+.discovery__text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 160ms var(--ease);
+}
+
 .hero__window {
   display: flex;
   flex: none;
@@ -4023,11 +4338,10 @@ input[type='checkbox']:focus-visible {
 }
 
 .panel {
-  width: min(420px, 92vw);
+  width: min(520px, 94vw);
 }
 
 .panel__body {
-  padding: 0 var(--s5) var(--s5);
   font-size: 13px;
   line-height: 1.5;
 }
@@ -4600,10 +4914,365 @@ input[type='checkbox']:focus-visible {
   opacity: 0.68;
 }
 
+/* ==================================================================
+   v3.1 控件细节：按钮分级 / 开关 / 分段 / 行状态 / 字距 / 对比度
+   ================================================================== */
+
+/* 次按钮：有发丝边框，用于“看一眼就能点”的分区动作 */
+.btn--outline {
+  border: 1px solid var(--hairline-strong);
+  color: var(--paper-dim);
+}
+
+/* 抽屉里的主按钮：琥珀实底黑字（概念板定案），不做大写与重字距 */
+.pane .btn--primary {
+  height: 28px;
+  padding: 0 12px;
+  background: var(--amber);
+  color: var(--ink);
+  font: 500 12px/1 var(--font-ui);
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.pane .btn--primary:hover:not(:disabled) {
+  background: #f0c374;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.candidate__head {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.candidate__name {
+  flex: 1 1 auto;
+}
+
+.candidate__meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin-top: 2px;
+}
+
+.candidate__example {
+  margin: 0;
+}
+
+.btn--outline:hover:not(:disabled) {
+  border-color: rgba(236, 231, 220, 0.28);
+  color: var(--paper);
+  text-decoration: none;
+}
+
+/* 键盘焦点：所有可点元素同一道环，不靠 UA 默认 */
+.btn:focus-visible,
+.nav-item:focus-visible,
+.sound-mode:focus-visible,
+.candidate__add:focus-visible,
+.project__remove:focus-visible,
+.term__remove:focus-visible {
+  outline: 1px solid rgba(232, 180, 90, 0.75);
+  outline-offset: 2px;
+  border-radius: 2px;
+  text-decoration: none;
+}
+
+/* 开关：36×20 滑轨 + 16px 旋钮（概念板尺寸） */
+.switch input[type='checkbox'] {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border-radius: 10px;
+  background: rgba(236, 231, 220, 0.18);
+  cursor: pointer;
+  transition: background 140ms var(--ease);
+}
+
+.switch input[type='checkbox']::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: rgba(236, 231, 220, 0.78);
+  transition: transform 140ms var(--ease), background 140ms var(--ease);
+}
+
+.switch:hover input[type='checkbox']:not(:checked) {
+  background: rgba(236, 231, 220, 0.28);
+}
+
+.switch input[type='checkbox']:checked {
+  background: var(--amber);
+}
+
+.switch input[type='checkbox']:checked::after {
+  transform: translateX(16px);
+  background: var(--ink);
+}
+
+.switch input[type='checkbox']:focus-visible {
+  outline: 1px solid rgba(232, 180, 90, 0.75);
+  outline-offset: 2px;
+}
+
+.switch input[type='checkbox']:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* 分段控件：一条轨道里切，而不是两个并排标签 */
+.sound-modes {
+  display: inline-flex;
+  gap: 0;
+  padding: 2px;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 2px;
+  background: rgba(236, 231, 220, 0.02);
+}
+
+.sound-mode {
+  height: 26px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 1px;
+  background: transparent;
+  color: var(--paper-dim);
+  font: 400 12px/1 var(--font-ui);
+  cursor: pointer;
+  transition: color 140ms var(--ease), background 140ms var(--ease), box-shadow 140ms var(--ease);
+}
+
+.sound-mode:hover:not(.is-active) {
+  background: rgba(236, 231, 220, 0.05);
+  color: var(--paper);
+  border-color: transparent;
+}
+
+.sound-mode.is-active {
+  background: var(--amber);
+  box-shadow: none;
+  color: var(--ink);
+}
+
+.sound-mode:focus-visible {
+  outline: 1px solid rgba(232, 180, 90, 0.75);
+  outline-offset: 1px;
+}
+
+/* 行：项目与候选用同一套行状态 */
+.project,
+.candidate {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--hairline);
+  transition: background 140ms var(--ease);
+}
+
+.project:hover,
+.candidate:hover {
+  background: rgba(236, 231, 220, 0.02);
+}
+
+/* 可改的名字：静止时虚线下划线就是“这里能改” */
+.candidate__name {
+  min-width: 96px;
+  max-width: 50%;
+  border-bottom: 1px dashed rgba(236, 231, 220, 0.22);
+}
+
+.candidate__name:hover {
+  border-bottom-color: rgba(236, 231, 220, 0.45);
+}
+
+.candidate__name:focus {
+  border-bottom: 1px solid var(--amber);
+}
+
+.candidate__add {
+  flex: none;
+  height: 24px;
+  padding: 0 8px;
+}
+
+/* 中文标签不再套拉丁大写的 0.18em 字距；中文 0，拉丁大写 2% */
+.chip,
+.hero__window-label,
+.highlight__label,
+.discovery__label,
+.candidate__source,
+.kv__label,
+.sound-volume__value {
+  letter-spacing: 0;
+}
+
+/* 导航是正文级：13px Plex Sans，不用 mono */
+.nav-item {
+  font: 400 13px/1.4 var(--font-ui);
+  letter-spacing: 0;
+}
+
+/* 可读的次要文字统一到 paper-dim：低于 .55 在 #14161c 上不达 4.5:1 */
+.note-line,
+.panel__status,
+.candidate__meta,
+.candidate__example,
+.project__terms,
+.kv__label,
+.disclosure summary,
+.disclosure__body,
+.nav-item__count,
+.sound-volume__value,
+.path,
+.nav-item {
+  color: rgba(236, 231, 220, 0.55);
+}
+
+.nav-item.is-active {
+  color: var(--amber);
+}
+
+/* 占位符：之前 #8e8a80 @56% 只有 ~3:1 */
+::placeholder {
+  color: rgba(236, 231, 220, 0.55);
+  opacity: 1;
+}
+
+/* 项目行：名称 / 关键词 / 操作（编辑、删除） */
+.ptable__head {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
+  gap: var(--s2);
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--hairline);
+  font: 400 10px/1.4 var(--font-mono);
+  color: rgba(236, 231, 220, 0.45);
+}
+
+.ptable__act {
+  text-align: right;
+}
+
+.project {
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) auto;
+}
+
+.project__actions {
+  display: flex;
+  gap: var(--s2);
+  justify-content: flex-end;
+}
+
+.project__edit {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: rgba(236, 231, 220, 0.55);
+  font: 400 10px/1.4 var(--font-mono);
+  cursor: pointer;
+}
+
+.project__remove {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 4px;
+}
+
+.project__edit:hover {
+  color: var(--paper);
+}
+
+/* 行内编辑：同一行展开成两个输入 + 保存/取消 */
+.project--editing {
+  display: block;
+}
+
+.project__edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: var(--s2);
+}
+
+.project__edit-actions {
+  display: flex;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+
+/* 960 最小窗口：抽屉收到 420，导航 96 */
+@media (max-width: 1080px) {
+  .panel {
+    width: min(420px, 96vw);
+  }
+
+  .panel__body {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+
+  .panel__pane {
+    padding: var(--s4) var(--s4) var(--s5);
+  }
+}
+
+/* 抽屉里滚动条的导轨不要吃内容和背景 */
+.panel__pane::-webkit-scrollbar {
+  width: 8px;
+}
+
+.panel__pane::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  background: rgba(236, 231, 220, 0.14);
+}
+
+.panel__pane::-webkit-scrollbar-thumb:hover {
+  background: rgba(236, 231, 220, 0.24);
+}
+
 /* 七日叙事弧里的花絮行 */
 .arc__extra {
   margin: 2px 0 0;
   font: 10px/1.4 var(--font-mono);
   color: #9aa0a6;
   font-variant-numeric: tabular-nums;
+}
+
+/* ==========================================================================
+   v4 上一集（S4）：两行文案，整行可点
+   ========================================================================== */
+
+.hero__episode {
+  flex: none;
+  margin: 0;
+  font: 400 13px/1.5 var(--font-ui);
+  color: var(--paper-dim);
+  white-space: pre-line;
+  cursor: pointer;
+}
+
+.hero__episode:hover,
+.hero__episode:focus-visible {
+  color: var(--paper);
+}
+
+.hero__intermission {
+  flex: none;
+  margin: 0;
+  font: 400 13px/1.5 var(--font-ui);
+  color: var(--paper-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

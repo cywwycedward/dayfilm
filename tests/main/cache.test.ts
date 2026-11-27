@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { buildDayRollup } from '../../src/main/reel'
 import { DayCache } from '../../src/main/reel/cache'
+import { previousEpisode } from '../../src/main/reel/previous-episode'
 import type { Sample } from '../../src/shared/types'
 
 const T0 = new Date(2026, 10, 22, 9, 0, 0).getTime()
@@ -108,6 +109,51 @@ describe('DayCache', () => {
     expect(before.scenes[0].end).toBeLessThan(late + DAY_MS)
     expect(after.scenes).toHaveLength(1)
     expect(after.scenes[0].start).toBeGreaterThan(late + DAY_MS - 2000)
+  })
+})
+
+describe('上一集', () => {
+  const RETAINED = ['2026-11-20', '2026-11-19', '2026-11-18', '2026-11-17']
+
+  /** 一天的采样：同一个窗口连拍四条（4 秒镜头，足够成为最长镜头）。 */
+  function samplesWith(date: string, title: string): Sample[] {
+    const start = new Date(`${date}T09:00:00`).getTime()
+    return [0, 1, 2, 3].map((index) => sample(start + index * 2000, 'Code', title))
+  }
+
+  it('逐日向前读，命中第一天就停：更早的两天不读盘', () => {
+    const loaded: string[] = []
+    const cache = new DayCache({
+      load: (date) => {
+        loaded.push(date)
+        return samplesWith(date, 'report.ts - Visual Studio Code')
+      }
+    })
+    const ref = previousEpisode('2026-11-20', {
+      retained: () => RETAINED,
+      day: (date) => cache.rollup(date, T0 + 30 * DAY_MS),
+      projects: () => []
+    })
+    expect(ref?.date).toBe('2026-11-19')
+    // 11-20 是锚点那天，11-19 命中；剩下的两天没有被加载
+    expect(loaded).toEqual(['2026-11-20', '2026-11-19'])
+  })
+
+  it('一直没有命中就读完所有更早的保留日期', () => {
+    const loaded: string[] = []
+    const cache = new DayCache({
+      load: (date) => {
+        loaded.push(date)
+        return samplesWith(date, date === '2026-11-20' ? 'dayfilm' : '微信')
+      }
+    })
+    const ref = previousEpisode('2026-11-20', {
+      retained: () => RETAINED,
+      day: (date) => cache.rollup(date, T0 + 30 * DAY_MS),
+      projects: () => []
+    })
+    expect(ref).toBeNull()
+    expect(loaded).toEqual(RETAINED)
   })
 })
 

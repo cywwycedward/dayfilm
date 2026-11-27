@@ -1,6 +1,7 @@
 import { IPC } from '../../shared/ipc'
 import type { Settings } from '../../shared/settings'
-import type { DayRollup, LiveState, Scene, ScreenplayExport } from '../../shared/types'
+import type { StorySuggestions } from '../../shared/stories'
+import type { DayRollup, EpisodeRef, LiveState, ScreenplayExport, SearchOutcome } from '../../shared/types'
 
 /**
  * 受来源守卫包装的 invoke 通道：`IPC` 里除单向推送的 `tick` 之外全部。
@@ -11,6 +12,7 @@ export const GUARDED_CHANNELS = {
   listDays: IPC.listDays,
   live: IPC.live,
   search: IPC.search,
+  previousEpisode: IPC.previousEpisode,
   exportScreenplay: IPC.exportScreenplay,
   getSettings: IPC.getSettings,
   setSettings: IPC.setSettings,
@@ -20,6 +22,9 @@ export const GUARDED_CHANNELS = {
   exportEdl: IPC.exportEdl,
   exportPdf: IPC.exportPdf,
   setMark: IPC.setMark,
+  suggestStories: IPC.suggestStories,
+  aiStories: IPC.aiStories,
+  aiProbe: IPC.aiProbe,
   setHud: IPC.setHud,
   quit: IPC.quit
 } as const
@@ -81,7 +86,8 @@ export interface IpcDeps {
   getDay(date: unknown): DayRollup
   listDays(): string[]
   live(): LiveState
-  search(query: unknown): Scene[]
+  search(query: unknown): SearchOutcome
+  previousEpisode(date: unknown): EpisodeRef | null
   exportScreenplay(date: unknown): Promise<ScreenplayExport> | ScreenplayExport
   getSettings(): Settings
   setSettings(patch: unknown): Settings
@@ -91,6 +97,9 @@ export interface IpcDeps {
   exportEdl(date: unknown): Promise<{ path: string }> | { path: string }
   exportPdf(date: unknown): Promise<{ path: string }> | { path: string }
   setMark(date: unknown, startMs: unknown, mark: unknown): DayRollup
+  suggestStories(): StorySuggestions
+  aiStories(): Promise<StorySuggestions>
+  aiProbe(): Promise<{ ok: boolean; detail: string }>
   setHud(visible: unknown): { visible: boolean }
   quit(): void
 }
@@ -102,6 +111,7 @@ export function createHandlers(deps: IpcDeps): Record<GuardedChannel, GuardedHan
     [IPC.listDays]: () => deps.listDays(),
     [IPC.live]: () => deps.live(),
     [IPC.search]: (query) => deps.search(query),
+    [IPC.previousEpisode]: (date) => deps.previousEpisode(date),
     [IPC.exportScreenplay]: (date) => deps.exportScreenplay(date),
     [IPC.getSettings]: () => deps.getSettings(),
     [IPC.setSettings]: (patch) => deps.setSettings(patch),
@@ -111,6 +121,9 @@ export function createHandlers(deps: IpcDeps): Record<GuardedChannel, GuardedHan
     [IPC.exportEdl]: (date) => deps.exportEdl(date),
     [IPC.exportPdf]: (date) => deps.exportPdf(date),
     [IPC.setMark]: (date, startMs, mark) => deps.setMark(date, startMs, mark),
+    [IPC.suggestStories]: () => deps.suggestStories(),
+    [IPC.aiStories]: () => deps.aiStories(),
+    [IPC.aiProbe]: () => deps.aiProbe(),
     [IPC.setHud]: (visible) => deps.setHud(visible),
     [IPC.quit]: () => deps.quit()
   }

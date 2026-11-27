@@ -4,7 +4,9 @@ import { basename, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { IPC } from '../shared/ipc'
 import type { Settings } from '../shared/settings'
-import type { DayRollup, LiveState, Sample, Scene, ScreenplayExport } from '../shared/types'
+import { storyCandidates, type StorySuggestions } from '../shared/stories'
+import type { DayRollup, LiveState, Sample, ScreenplayExport } from '../shared/types'
+import { aiConfigured, probeModel, suggestStoriesWithModel } from './ai'
 import { loginItemSettings } from './autostart'
 import { createCapture, resolveCaptureScript, type Capture } from './capture'
 import { parseEdlDate, writeEdlFile } from './edl'
@@ -31,9 +33,10 @@ import { MarksStore } from './marks'
 import { NotesStore } from './notes'
 import { buildScriptHtml } from './pdf'
 import { writePdf } from './pdf/render'
-import { buildDayRollup, renderScreenplay, searchScenes } from './reel'
+import { buildDayRollup, liveScene, renderScreenplay } from './reel'
 import { DayCache } from './reel/cache'
-import { GAP_MS, IDLE_MS } from './reel/rules'
+import { previousEpisode } from './reel/previous-episode'
+import { searchOutcome } from './reel/search'
 import { resolveResource } from './resources'
 import { cleanupExpired } from './retention'
 import { MAX_BASE64_LENGTH, decodePngBase64, sanitizeImageName } from './save-image'
@@ -47,8 +50,10 @@ import { bindMaximizeEvents, createWindowActions } from './window-chrome'
 import type { TrayState } from './tray/tooltip'
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-/** 检索最多回看最近 7 天。 */
-const SEARCH_DAYS = 7
+/** 故事线候选最多回看最近 30 天（规格 S1.2）。 */
+const SUGGEST_DAYS = 30
+/** 确定性候选与模型候选合并后的上限。 */
+const SUGGEST_LIMIT = 12
 const TICK_MS = 2000
 const DAY_MS = 86_400_000
 /** 单日文件超过这个体积就提示（规格 R14.3）。 */
@@ -109,31 +114,39 @@ function rollupFor(date: string): DayRollup {
   return cache.rollup(date, Date.now())
 }
 
-/** 正在拍摄的镜头：取尾部同窗口的非空闲采样，不必等到满 3 秒成镜。 */
-function liveScene(samples: Sample[], day: DayRollup, date: string, now: number): Scene | null {
-  const last = samples[samples.length - 1]
-  if (!last || last.idleMs >= IDLE_MS) return null
-  let start = last.t
-  for (let index = samples.length - 2; index >= 0; index -= 1) {
-    const sample = samples[index]
-    if (sample.idleMs >= IDLE_MS || sample.exe !== last.exe || sample.title !== last.title) break
-    if (last.t - sample.t > GAP_MS) break
-    start = sample.t
+/** 候选与模型摘要都只看最近 30 天，按日期倒序取窗口。 */
+function suggestDays(): DayRollup[] {
+  return [...keptDays()]
+    .sort()
+    .reverse()
+    .slice(0, SUGGEST_DAYS)
+    .map(rollupFor)
+}
+
+/** 纯规则候选：不发网络请求，不写任何设置。 */
+function suggestStories(): StorySuggestions {
+  try {
+    const rules = settings.get().projects
+    return { candidates: storyCandidates(suggestDays(), rules), failure: null }
+  } catch (error) {
+    console.warn('[dayfilm] 读取最近 30 天失败', describeError(error))
+    return { candidates: [], failure: { kind: 'read', detail: '读取最近 30 天失败' } }
   }
-  // 与切分结果对齐时复用它的 id，界面才能高亮到胶片上的同一块。
-  const match = day.scenes.find(
-    (scene) => scene.kind === 'shot' && scene.start === start && scene.exe === last.exe && scene.title === last.title
-  )
-  const end = Math.max(now, last.t)
-  return {
-    id: match ? match.id : `${date}-live`,
-    start,
-    end,
-    exe: last.exe,
-    title: last.title,
-    seconds: Math.round((end - start) / 1000),
-    kind: 'shot'
+}
+
+/** 用户点按钮：确定性候选 + 模型补充；模型失败时仍然返回确定性候选。 */
+async function aiStories(): Promise<StorySuggestions> {
+  const base = suggestStories()
+  const ai = settings.get().ai
+  if (!aiConfigured(ai)) return { candidates: base.candidates, failure: { kind: 'not-configured', detail: '模型通道未配置' } }
+  const days = suggestDays()
+  const outcome = await suggestStoriesWithModel(ai, days, settings.get().projects)
+  const merged = [...base.candidates]
+  for (const candidate of outcome.candidates) {
+    const clash = merged.some((item) => item.term.includes(candidate.term) || candidate.term.includes(item.term))
+    if (!clash) merged.push(candidate)
   }
+  return { candidates: merged.slice(0, SUGGEST_LIMIT), failure: outcome.failure }
 }
 
 function liveState(): LiveState {
@@ -330,12 +343,11 @@ function registerIpc(): void {
     },
     listDays: () => keptDays(),
     live: () => liveState(),
-    search: (query) => {
-      if (typeof query !== 'string') return []
-      const dates = new Set<string>([todayKey(), ...keptDays()])
-      const recent = [...dates].sort().reverse().slice(0, SEARCH_DAYS)
-      return searchScenes(query, recent.map(rollupFor))
-    },
+    search: (query) => searchOutcome(query, { retained: keptDays, day: rollupFor }),
+    previousEpisode: (date) =>
+      typeof date === 'string' && DATE_PATTERN.test(date)
+        ? previousEpisode(date, { retained: keptDays, day: rollupFor, projects: () => settings.get().projects })
+        : null,
     exportScreenplay: (date) => (typeof date === 'string' ? exportScreenplay(date) : { path: '' }),
     getSettings: () => settings.get(),
     setSettings: (patch) => applySettings(patch),
@@ -348,6 +360,9 @@ function registerIpc(): void {
     exportEdl: (date) => exportEdl(date),
     exportPdf: (date) => exportPdf(date),
     setMark: (date, startMs, mark) => setMarkAndRollup(date, startMs, mark),
+    suggestStories: () => suggestStories(),
+    aiStories: () => aiStories(),
+    aiProbe: () => probeModel(settings.get().ai),
     setHud: (visible) => setHudVisible(visible),
     quit: () => {
       quitApp()
